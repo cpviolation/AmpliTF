@@ -35,110 +35,80 @@ $$
 
 ... Continue explanation later
 """
+import tensorflow as tf
 import amplitf.interface as atfi
-
-class Mixing:
-
-    def __init__(
-            self,
-            ampDir : complex,
-            ampCnj : complex,
-            tau : float,
-            x=0.,
-            y=0.,
-            cpv=0.,
-            cpv_phase=1.
-    ):
-        """Constructor
-
-        Args:
-            ampDir (complex): the amplitude of the direct decay model
-            ampCnj (complex): the amplitude of the conjugate decay model
-            tau (float): the decay time of the neutral meson.
-            x (float, optional): the normalised mass difference. Defaults to 0.
-            y (float, optional): the normalised width difference. Defaults to 0.
-            cpv (float, optional): the amplitude of CP violation (|q/p|). Defaults to 0.
-            cpv_phase (float, optional): the pahse of CP violation (arg(q\p)). Defaults to 1.
-        """
-        self.ampDir = ampDir
-        self.ampCnj = ampCnj
-        self.tau = tau
-        self.x = x
-        self.y = y
-        self.cpv = cpv
-        self.cpv_phase = cpv_phase
-        return
+import amplitf.dynamics as atfd
 
 
-    def gamma(self):
-        """The inverse of the decay time of the neutral meson
+# Time evolution functions.
+@atfi.function
+def psip( t, x, tau ):
+    r"""Time evolution function $\psi_+(t)$
 
-        Returns:
-            float: the inverse of the decay time
-        """        
-        return 1. / self.tau
+    Args:
+        t (float): decay time of the candidate
+        x (float): mixing parameter
+        tau (float): lifetime of the decaying particle
 
-
-    # Time evolution functions.
-    def psip( 
-            self, 
-            t : float 
-            ):
-        """Time evolution function $\psi_+(t)$
-
-        Args:
-            t (float): decay time of the candidate
-
-        Returns:
-            float: the time evolution function for the sum of the two decay amplitudes
-        """
-        return atfi.exp( - ( 1.0 - self.x ) * self.gamma() * t )
+    Returns:
+        float: the time evolution function for the sum of the two decay amplitudes
+    """
+    return atfi.exp( - ( 1.0 - x ) * t / tau)
 
 
-    def psim( 
-            self, 
-            t : float 
-            ):
-        """Time evolution function $\psi_-(t)$
+@atfi.function
+def psim( t, x, tau ):
+    r"""Time evolution function $\psi_-(t)$
 
-        Args:
-            t (float): decay time of the candidate
+    Args:
+        t (float): decay time of the candidate
+        x (float): mixing parameter
+        tau (float): lifetime of the decaying particle
 
-        Returns:
-            float: the time evolution function for the difference of the two decay amplitudes
-        """
-        return atfi.exp( - ( 1.0 + self.x ) * self.gamma() * t )
-
-
-    def psii( 
-            self, 
-            t : float 
-            ):
-        """Time evolution function $\psi_i(t)$
-
-        Args:
-            t (float): decay time of the candidate
-
-        Returns:
-            float: the time evolution function for the interference of the two decay amplitudes
-        """
-        return atfi.exp( - atfi.complex( 1.0, - self.y ) * self.gamma() * t )
+    Returns:
+        float: the time evolution function for the sum of the two decay amplitudes
+    """
+    return atfi.exp( - ( 1.0 + x ) * t / tau)
 
 
-    def amplitude(
-            self,
-            t
-            ):
-        qoverp = atfi.complex( self.cpv * atfi.cos(self.cpv_phase), 
-                               self.cpv * atfi.sin(self.cpv_phase) )
-        ampDir = self.ampDir
-        ampCnj = qoverp * self.ampCnj
+@atfi.function
+def psii( t, y, tau ):
+    r"""Time evolution function $\psi_i(t)$
 
-        apb2 = 0.5 * (ampDir + ampCnj)
-        amb2 = 0.5 * atfi.conjugate(ampDir - ampCnj)
+    Args:
+        t (float): decay time of the candidate
+        y (float): mixing parameter
+        tau (float): lifetime of the decaying particle
 
-        ampSq = 0.0
-        ampSq += atfi.density( apb2 ) * self.psip( t )
-        ampSq += atfi.density( amb2 ) * self.psim( t )
-        ampSq += 2.0 * atfi.cast_real( apb2 * amb2 * self.psii( t ) )
-        return ampSq
+    Returns:
+        float: the time evolution function for the sum of the two decay amplitudes
+    """
+    return atfi.exp( - atfi.complex( atfi.const(1.0) , -y ) * tf.cast(t / tau, tf.complex128))
+
+
+# Probability density
+def mixing_density(ampl_dir, ampl_cnj, qoverp,
+                   time_evolution_pos, time_evolution_neg, time_evolution_int):
+    """Calculates the probability density of the mixing
+
+    Args:
+        ampl_dir (complex): amplitude of the direct decay
+        ampl_cnj (complex): amplitude of the charged conjugate decay
+        qoverp (complex): CP violation
+        time_evolution_pos (float): time evolution of the sum of the decays
+        time_evolution_neg (float): time evolution of the subtraction of the decays
+        time_evolution_int (complex): time evolution of the interference of the decays
+
+    Returns:
+        float: the density of probability for the event
+    """    
+    ampDir = ampl_dir
+    ampCnj = qoverp * ampl_cnj
+
+    apb2 = 0.5 * (ampDir + ampCnj)
+    amb2 = 0.5 * atfi.conjugate(ampDir - ampCnj)
+
+    dens  = atfd.density( apb2 ) * time_evolution_pos
+    dens += atfd.density( amb2 ) * time_evolution_neg
+    dens += 2.0 * tf.math.real( apb2 * amb2 * time_evolution_int )
+    return dens
