@@ -35,7 +35,8 @@ class DecayTimePhaseSpace:
         """
         Check if the point x is inside the phase space (x > 0)
         """
-        inside = tf.squeeze(tf.greater(x, 0))
+        t = self.t(x)
+        inside = tf.greater(t, 0)
         return inside
 
     @atfi.function
@@ -78,4 +79,4 @@ class DecayTimePhaseSpace:
     
     @atfi.function
     def t(self, sample):
-        return sample
+        return sample[..., 0]
