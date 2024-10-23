@@ -42,22 +42,22 @@ import amplitf.dynamics as atfd
 
 # Time evolution functions.
 @atfi.function
-def psip( t, x, tau ):
+def psip( t, y, tau ):
     r"""Time evolution function $\psi_+(t)$
 
     Args:
         t (float): decay time of the candidate
-        x (float): mixing parameter
+        y (float): mixing parameter
         tau (float): lifetime of the decaying particle
 
     Returns:
         float: the time evolution function for the sum of the two decay amplitudes
     """
-    return atfi.exp( - ( 1.0 - x ) * t / tau)
+    return atfi.exp( - ( 1.0 + y ) * t / tau)
 
 
 @atfi.function
-def psim( t, x, tau ):
+def psim( t, y, tau ):
     r"""Time evolution function $\psi_-(t)$
 
     Args:
@@ -68,22 +68,22 @@ def psim( t, x, tau ):
     Returns:
         float: the time evolution function for the sum of the two decay amplitudes
     """
-    return atfi.exp( - ( 1.0 + x ) * t / tau)
+    return atfi.exp( - ( 1.0 - y ) * t / tau)
 
 
 @atfi.function
-def psii( t, y, tau ):
+def psii( t, x, tau ):
     r"""Time evolution function $\psi_i(t)$
 
     Args:
         t (float): decay time of the candidate
-        y (float): mixing parameter
+        x (float): mixing parameter
         tau (float): lifetime of the decaying particle
 
     Returns:
         float: the time evolution function for the sum of the two decay amplitudes
     """
-    return atfi.exp( - atfi.complex( atfi.const(1.0) , -y ) * tf.cast(t / tau, tf.complex128))
+    return atfi.exp( - atfi.complex( atfi.const(1.0) , x ) * tf.cast(t / tau, tf.complex128))
 
 
 # Probability density
