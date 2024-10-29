@@ -13,25 +13,27 @@
 # limitations under the License.
 # ==============================================================================
 
-"""
+r"""
 Formulas for building a model where meson mixing is involved.
 
 The mixing parameters for the mass eigenstates of a neutral meson ($M^0, \bar{M}^0$) are
 
-$$
-\begin{align}
-x &\equiv 2\frac{m_2-m_1}{\gamma_1+\gamma_2} = \frac{\Delta M}{\Gamma}\\
-y &\equiv \frac{\gamma_2-\gamma_1}{\gamma_1+\gamma_2} = \frac{\Delta\Gamma}{2\Gamma},
-\end{align}
-$$
+.. math::
 
-where $m_i$ and $\gamma_i$ ($i=1,2$) are the eigenvalues of the phyical eigenstates $M_{1,2}$.
+    \begin{align}
+    x &\equiv 2\frac{m_2-m_1}{\gamma_1+\gamma_2} = \frac{\Delta M}{\Gamma}\\
+    y &\equiv \frac{\gamma_2-\gamma_1}{\gamma_1+\gamma_2} = \frac{\Delta\Gamma}{2\Gamma},
+    \end{align}
+
+
+where :math:`m_i` and :math:`\gamma_i` (:math:`i=1,2`) are the eigenvalues of the phyical eigenstates :math:`M_{1,2}`.
 
 The time evolution of the physical states is given by
 
-$$
-|\M_i(t)>= e^{-i(m_i-i\gamma_i/2)t}|\M_i(t=0)>.
-$$
+.. math::
+    
+    |\M_i(t)>= e^{-i(m_i-i\gamma_i/2)t}|\M_i(t=0)>.
+
 
 ... Continue explanation later
 """
