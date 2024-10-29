@@ -20,28 +20,61 @@ import amplitf.kinematics as atfk
 
 @atfi.function
 def density(ampl):
-    """ density for a complex amplitude """
+    """density for a complex amplitude: :math:`|ampl|^2`
+
+    Args:
+        ampl (complex): the amplitude
+
+    Returns:
+        float: density for the amplitude
+    """
     return abs(ampl) ** 2
 
 
 @atfi.function
 def polar(a, ph):
-    """ Create a complex number from a magnitude and a phase """
+    """Create a complex number from polar coordinates
+
+    Args:
+        a (float): magnitude
+        ph (float): phase
+
+    Returns:
+        complex: complex number from magnitude and phase
+    """
     return complex(a * cos(ph), a * sin(ph))
 
 
 @atfi.function
 def argument(c):
-    """ Return argument (phase) of a complex number """
+    """Return argument (phase) of a complex number :math:`atan2(imag(c), real(c))`
+
+    Args:
+        c (complex): complex number
+
+    Returns:
+        float: argument of the complex number
+    """
     return atan2(imag(c), real(c))
 
 
 @atfi.function
 def helicity_amplitude(x, spin):
-    """
-    Helicity amplitude for a resonance in scalar-scalar state
-      x    : cos(helicity angle)
-      spin : spin of the resonance
+    r"""Helicity amplitude for a resonance in scalar-scalar state
+        
+        - spin 0: :math:`1`
+        - spin 1: :math:`x`
+        - spin 2: :math:`(3x^2-1)/2`
+        - spin 3: :math:`(5x^3-3x)/2`
+        - spin 4: :math:`(35x^4-30x^2+3)/8`
+        - spin < 0 or > 4: None
+
+    Args:
+        x (float): cos(helicity angle)
+        spin (int): spin of the resonance
+
+    Returns:
+        complex: the helicity amplitude
     """
     if spin == 0:
         return atfi.complex(atfi.const(1.0), atfi.const(0.0))
@@ -60,8 +93,20 @@ def helicity_amplitude(x, spin):
 
 @atfi.function
 def relativistic_breit_wigner(m2, mres, wres):
-    """
-    Relativistic Breit-Wigner
+    r"""Relativistic Breit-Wigner
+
+        .. math::
+
+            BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma}
+
+
+    Args:
+        m2 (float): invariant mass squared of the resonating system
+        mres (float): mass of the resonance
+        wres (float): width of the resonance
+
+    Returns:
+        complex: relativistic Breit-Wigner amplitude
     """
     if wres.dtype is atfi.ctype():
         return tf.math.reciprocal(
@@ -75,8 +120,28 @@ def relativistic_breit_wigner(m2, mres, wres):
 
 @atfi.function
 def blatt_weisskopf_ff(q, q0, d, l):
-    """
-    Blatt-Weisskopf formfactor for intermediate resonance
+    r"""Blatt-Weisskopf form factor for intermediate resonance
+
+        .. math::
+
+            BWFF(q) = \sqrt{\frac{H_l(z_0)}{H_l(z)}}
+
+    with :math:`z = q d` and :math:`z_0 = q_0 d` and :math:`H_l(z)` (Hankel function) defined as
+
+        - :math:`H_0(z) = 1`
+        - :math:`H_1(z) = 1 + z^2`
+        - :math:`H_2(z) = 9 + z^2 (3 + z^2)`
+        - :math:`H_3(z) = 225 + z^2 (45 + z^2 (6 + z^2))`
+        - :math:`H_4(z) = 11025 + z^2 (1575 + z^2 (135 + z^2 (10 + z^2)))`
+
+    Args:
+        q (float): q-value at the invariant mass of the system
+        q0 (float): q-value at the resonance
+        d (float): barrier radius
+        l (int): the orbital angular momentum of the resonance
+
+    Returns:
+        float: Blatt-Weisskopf form factor
     """
     z = q * d
     z0 = q0 * d
@@ -101,6 +166,25 @@ def blatt_weisskopf_ff(q, q0, d, l):
 
 @atfi.function
 def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
+    r"""Blatt-Weisskopf form factor squared for intermediate resonance
+
+        - :math:`l = 0`: :math:`1`
+        - :math:`l = 1`: :math:`\frac{2z}{z+1}`
+        - :math:`l = 2`: :math:`\frac{13z^2}{(z-3)^2 + 9z}`
+        - :math:`l = 3`: :math:`\frac{277z^3}{z(z-15)^2 + 9(2z-5)^2}`
+        - :math:`l = 4`: :math:`\frac{12746z^4}{(z^2 - 45z + 105)^2 + 25z(2z-21)^2}`
+
+        with :math:`z = q^2 d^2`
+        
+
+    Args:
+        q_squared (float): q-value squared at the invariant mass of the system
+        d (float): barrier radius
+        l_orbit (int): the orbital angular momentum of the resonance
+
+    Returns:
+        float: the squared Blatt-Weisskopf form factor
+    """    
     z = q_squared * d * d
 
     def _bw_ff_squared(x):
@@ -125,8 +209,24 @@ def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
 
 @atfi.function
 def mass_dependent_width(m, m0, gamma0, p, p0, ff, l):
-    """
-    mass-dependent width for BW amplitude
+    r"""Mass dependent width for Breit-Wigner amplitude
+
+        - :math:`l = 0`: :math:`\Gamma = \Gamma_0 \frac{p}{p_0} \frac{m_0}{m} |FF|^2`
+        - :math:`l = 1`: :math:`\Gamma = \Gamma_0 \left(\frac{p}{p_0}\right)^3 \frac{m_0}{m} |FF|^2`
+        - :math:`l = 2`: :math:`\Gamma = \Gamma_0 \left(\frac{p}{p_0}\right)^5 \frac{m_0}{m} |FF|^2`
+        - :math:`l \geq 3`: :math:`\Gamma = \Gamma_0 \left(\frac{p}{p_0}\right)^{2l+1} \frac{m_0}{m} |FF|^2`
+
+    Args:
+        m (float): invariant mass of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        p (float): momentum of the system
+        p0 (float): momentum of the resonance
+        ff (float): form factor
+        l (int): orbital angular momentum of the resonance
+
+    Returns:
+        float: mass dependent width
     """
     if l == 0:
         return gamma0 * (p / p0) * (m0 / m) * (ff * ff)
@@ -140,8 +240,19 @@ def mass_dependent_width(m, m0, gamma0, p, p0, ff, l):
 
 @atfi.function
 def orbital_barrier_factor(p, p0, l):
-    """
-    Orbital barrier factor
+    r"""Orbital barrier factor :math:`B_l` for the resonance
+
+        - :math:`l = 0`: :math:`1`
+        - :math:`l = 1`: :math:`\frac{p}{p_0}`
+        - :math:`l \geq 2`: :math:`\left(\frac{p}{p_0}\right)^l`
+
+    Args:
+        p (float): momentum of the system
+        p0 (float): momentum of the system assuming the resonance mass
+        l (int): orbital angular momentum of the resonance
+
+    Returns:
+        float: orbital barrier factor
     """
     if l == 0:
         return atfi.ones(p)
@@ -168,8 +279,45 @@ def breit_wigner_lineshape(
     ma0=None,
     md0=None,
 ):
-    """
-    Breit-Wigner amplitude with Blatt-Weisskopf formfactors, mass-dependent width and orbital barriers
+    r"""Breit-Wigner amplitude with Blatt-Weisskopf form factors, mass-dependent width and orbital barriers
+
+        .. math::
+
+            BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)} FF_r FF_d
+
+            
+        if barrier_factor is True, the orbital barrier factors are included in the form factor
+
+        .. math::
+
+            BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)} FF_r FF_d B_r B_d
+
+        
+        where
+            - :math:`\Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)` is the mass-dependent width
+            - :math:`FF_r = BWFF(p, p_0, d_r, l_r)` is the Blatt-Weisskopf form factor for the resonance
+            - :math:`FF_d = BWFF(p, p_0, d_d, l_d)` is the Blatt-Weisskopf form factor for the decay
+            - :math:`B_r = B_l(p, p_0, l_r)` is the orbital barrier factor for the resonance
+            - :math:`B_d = B_l(q, q_0, l_d)` is the orbital barrier factor for the decay
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+        mc (float): mass of the other particle (particle c)
+        md (float): mass of the decaying particle
+        dr (float): barrier radius for the resonance
+        dd (float): barrier radius for the decay
+        lr (int): orbital angular momentum of the resonance
+        ld (int): orbital angular momentum of the decay
+        barrier_factor (bool, optional): multiplies the form factor for the barrier factors. Defaults to True.
+        ma0 (float, optional): alternative value for the mass of the decaying particle to calculate the momentum of the system assuming the resonance mass. Defaults to None.
+        md0 (float, optional): alternative value for the mass of the decaying particle to calculate the q-value of the system assuming the resonance mass. Defaults to None.
+
+    Returns:
+        complex: the Breit-Wigner amplitude
     """
     m = atfi.sqrt(m2)
     q = atfk.two_body_momentum(md, m, mc)
