@@ -166,7 +166,7 @@ def blatt_weisskopf_ff(q, q0, d, l):
 
 @atfi.function
 def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
-    r"""Blatt-Weisskopf form factor squared for intermediate resonance
+    r"""Blatt-Weisskopf form factor squared for intermediate resonance (:math:`BWFF2(q)`)
 
         - :math:`l = 0`: :math:`1`
         - :math:`l = 1`: :math:`\frac{2z}{z+1}`
@@ -175,7 +175,6 @@ def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
         - :math:`l = 4`: :math:`\frac{12746z^4}{(z^2 - 45z + 105)^2 + 25z(2z-21)^2}`
 
         with :math:`z = q^2 d^2`
-        
 
     Args:
         q_squared (float): q-value squared at the invariant mass of the system
@@ -338,11 +337,32 @@ def breit_wigner_lineshape(
 
 @atfi.function
 def breit_wigner_decay_lineshape(m2, m0, gamma0, ma, mb, meson_radius, l_orbit):
-    """
-    Breit-Wigner amplitude with Blatt-Weisskopf form factor for the decay products,
+    r"""Breit-Wigner amplitude with Blatt-Weisskopf form factor for the decay products,
     mass-dependent width and orbital barriers
 
+    .. math::
+
+        BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma} m_{res} \Gamma_0 \sqrt{FF^2}
+
+    with
+
+    .. math::
+
+        \Gamma = \Gamma_0 \frac{m_{res}}{m} \frac{BWFF2(q^2)}{BWFF2(q_0^2)} \sqrt{\frac{q^2}{q_0^2}}
+
     Note: This function does not include the production form factor.
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+        meson_radius (float): barrier radius for the resonance
+        l_orbit (int): orbital angular momentum of the resonance
+
+    Returns:
+        complex: Breit-Wigner amplitude
     """
     inv_mass = atfi.sqrt(m2)
     q_squared = atfk.two_body_momentum_squared(inv_mass, ma, mb)
@@ -367,9 +387,44 @@ def breit_wigner_decay_lineshape(m2, m0, gamma0, ma, mb, meson_radius, l_orbit):
 def subthreshold_breit_wigner_lineshape(
     m2, m0, gamma0, ma, mb, mc, md, dr, dd, lr, ld, barrier_factor=True
 ):
-    """
-    Breit-Wigner amplitude (with the mass under kinematic threshold)
-    with Blatt-Weisskopf formfactors, mass-dependent width and orbital barriers
+    r"""Breit-Wigner amplitude (with the mass under kinematic threshold)
+    with Blatt-Weisskopf form factors, mass-dependent width and orbital barriers
+
+    .. math::
+
+        BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)} FF_r FF_d
+
+            
+    if barrier_factor is True, the orbital barrier factors are included in the form factor
+
+    .. math::
+
+        BW(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)} FF_r FF_d B_r B_d
+
+        
+    where
+        - :math:`\Gamma(m, m_{res}, \Gamma_{res}, p, p_0, FF_r, l_r)` is the mass-dependent width
+        - :math:`FF_r = BWFF(p, p_0, d_r, l_r)` is the Blatt-Weisskopf form factor for the resonance
+        - :math:`FF_d = BWFF(p, p_0, d_d, l_d)` is the Blatt-Weisskopf form factor for the decay
+        - :math:`B_r = B_l(p, p_0, l_r)` is the orbital barrier factor for the resonance
+        - :math:`B_d = B_l(q, q_0, l_d)` is the orbital barrier factor for the decay
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+        mc (float): mass of the other particle (particle c)
+        md (float): mass of the decaying particle
+        dr (float): barrier radius for the resonance
+        dd (float): barrier radius for the decay
+        lr (int): orbital angular momentum of the resonance
+        ld (int): orbital angular momentum of the decay
+        barrier_factor (bool, optional): multiplies the form factor for the barrier factors. Defaults to True.
+
+    Returns:
+        complex: Breit-Wigner amplitude
     """
     m = atfi.sqrt(m2)
     mmin = ma + mb
@@ -396,8 +451,22 @@ def subthreshold_breit_wigner_lineshape(
 def exponential_nonresonant_lineshape(
     m2, m0, alpha, ma, mb, mc, md, lr, ld, barrierFactor=True
 ):
-    """
-    Exponential nonresonant amplitude with orbital barriers
+    r"""Exponential nonresonant amplitude with orbital barriers
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+        mc (float): mass of the other particle (particle c)
+        md (float): mass of the decaying particle
+        lr (int): orbital angular momentum of the resonance
+        ld (int): orbital angular momentum of the decay
+        barrier_factor (bool, optional): multiplies the form factor for the barrier factors. Defaults to True.
+
+    Returns:
+        complex: Exponential non-resonant lineshape amplitude
     """
     if barrierFactor:
         m = atfi.sqrt(m2)

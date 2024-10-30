@@ -9,7 +9,7 @@ Introduction
 The package includes the primitives to operate with relativistic kinematics (operations with Lorentz vectors, elements of helicity formalism), 
 and descriptions of the dynamical functions (such as Breit-Wigner line shapes) using Google TensorFlow library. 
 
-This package is a fork of `TensorFlowAnalysis <https://gitlab.cern.ch/poluekt/TensorFlowAnalysis>`_` that includes only the "stable" basic functionality. 
+This package is a fork of `TensorFlowAnalysis <https://gitlab.cern.ch/poluekt/TensorFlowAnalysis>`_ that includes only the "stable" basic functionality. 
 The rest of TensorFlowAnalysis functions is moved to a separate package called `TFA2 <https://github.com/apoluekt/TFA2>`_. 
 
 The package is compatible with TensorFlow v2. 
@@ -35,9 +35,9 @@ After checking out the package from git, run
 Links
 -----
 
-   * `TensorFlowAnalysis: https://gitlab.cern.ch/poluekt/TensorFlowAnalysis <https://gitlab.cern.ch/poluekt/TensorFlowAnalysis>`_
-   * `ZFit: https://github.com/zfit/zfit <https://github.com/zfit/zfit>`_
-   * `ComPWA: https://github.com/ComPWA <https://github.com/ComPWA>`_
+   * `TensorFlowAnalysis <https://gitlab.cern.ch/poluekt/TensorFlowAnalysis>`_
+   * `ZFit <https://github.com/zfit/zfit>`_
+   * `ComPWA <https://github.com/ComPWA>`_
 
 
 .. .. toctree::
