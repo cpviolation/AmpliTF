@@ -453,10 +453,20 @@ def exponential_nonresonant_lineshape(
 ):
     r"""Exponential nonresonant amplitude with orbital barriers
 
+    .. math::
+
+        \text{NR}_{\text{exp}}(m^2) = \exp(-\alpha(m^2 - m_0^2))
+
+    If `barrier_factor` is `True`, the orbital barrier factors are included in the form factor
+
+    .. math::
+
+        \text{NR}_{\text{exp}}(m^2) = \exp(-\alpha(m^2 - m_0^2)) B_r B_d
+
     Args:
         m2 (float): invariant mass squared of the system
         m0 (float): resonance mass
-        gamma0 (float): resonance width
+        alpha (float): slope of the exponential
         ma (float): mass of particle a
         mb (float): mass of particle b
         mc (float): mass of the other particle (particle c)
@@ -487,11 +497,33 @@ def exponential_nonresonant_lineshape(
 def polynomial_nonresonant_lineshape(
     m2, m0, coeffs, ma, mb, mc, md, lr, ld, barrierFactor=True
 ):
-    """
-    2nd order polynomial nonresonant amplitude with orbital barriers
-    coeffs: list of atfi.complex polynomial coefficients [a0, a1, a2]
-    """
+    r"""Second order polynomial nonresonant amplitude with orbital barriers
 
+    .. math::
+
+        \text{NR}_{\text{poly}}(m^2) = a_0 + a_1(m - m_0) + a_2(m - m_0)^2
+
+    If `barrier_factor` is `True`, the orbital barrier factors are included in the form factor
+
+    .. math::
+
+        \text{NR}_{\text{poly}}(m^2) = a_0 + a_1(m - m_0) + a_2(m - m_0)^2 B_r B_d    
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        coeffs (list): list of atfi.complex polynomial coefficients [:math:`a0`, :math:`a1`, :math:`a2`]
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+        mc (float): mass of the other particle (particle c)
+        md (float): mass of the decaying particle
+        lr (int): orbital angular momentum of the resonance
+        ld (int): orbital angular momentum of the decay
+        barrier_factor (bool, optional): multiplies the form factor for the barrier factors. Defaults to True.
+
+    Returns:
+        complex: Second order polynomial non-resonant lineshape amplitude
+    """
     def poly(x, cs):
         return (
             cs[0]
@@ -499,8 +531,8 @@ def polynomial_nonresonant_lineshape(
             + cs[2] * atfi.complex(x ** 2, atfi.const(0.0))
         )
 
+    m = atfi.sqrt(m2)
     if barrierFactor:
-        m = atfi.sqrt(m2)
         q = atfk.two_body_momentum(md, m, mc)
         q0 = atfk.two_body_momentum(md, m0, mc)
         p = atfk.two_body_momentum(m, ma, mb)
@@ -514,12 +546,33 @@ def polynomial_nonresonant_lineshape(
 
 @atfi.function
 def gounaris_sakurai_lineshape(s, m, gamma, m_pi):
-    """
-    Gounaris-Sakurai shape for rho->pipi
-      s     : squared pipi inv. mass
-      m     : rho mass
-      gamma : rho width
-      m_pi  : pion mass
+    r"""Gounaris-Sakurai shape for :math:`\rho\to\pi\pi`
+
+    .. math::
+
+        \text{GS}(s) = \frac{m_0^2 - m^2 +f +i m \Gamma_0}{\left(m_0^2 - m^2 + f \right)^2 + m^2 \Gamma_0^2}
+        
+    with
+
+    .. math::
+
+        \begin{align*}
+        f &= \frac{\Gamma_0 m_0^2}{p_0^3} \left(p_{\pi\pi}^2 (h(m^2) - h(m_0^2)) - p_0^2 (m^2 - m_0^2) \left.\frac{d h(m^2)}{d m}\right|_{m_0^2}\right)\\
+        h(m) &= \frac{2}{\pi} \frac{p(m)}{\sqrt{m}} \log\left(\frac{m + 2 p(m)}{2 m_{\pi}}\right)\\
+        p(m) &= \frac{m^2 - 4 m_{\pi}^2}{4}\\
+        p_{\pi\pi}^2 &= p^2(m)\\
+        p_0^2 &= p^2(m_0^2)\\
+        \end{align*}
+       
+
+    Args:
+        s (float): invariant mass squared of the system
+        m (float): resonance mass
+        gamma (float): resonance width
+        m_pi (float): pion mass
+
+    Returns:
+        complex: Gounaris-Sakurai amplitude
     """
     m2 = m * m
     m_pi2 = m_pi * m_pi
@@ -549,12 +602,35 @@ def gounaris_sakurai_lineshape(s, m, gamma, m_pi):
 
 @atfi.function
 def flatte_lineshape(s, m, g1, g2, ma1, mb1, ma2, mb2):
-    """
-    Flatte line shape
-      s : squared inv. mass
-      m : resonance mass
-      g1 : coupling to ma1, mb1
-      g2 : coupling to ma2, mb2
+    r"""Flatté line shape
+
+    .. math::
+
+        F(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma}
+
+    with
+
+    .. math::
+
+        \begin{align*}
+        \Gamma &= \frac{g_1^2 \rho_1 + g_2^2 \rho_2}{m}\\
+        \rho_i &= \frac{2 p_i(m)}{m}
+        \end{align*}
+
+    where :math:`p_i(m)` is the momentum of two-body decay products R->AB in the R rest frame for the decay channel :math:`i`
+
+    Args:
+        s (float): invariant mass squared of the system
+        m (float): resonance mass
+        g1 (float): coupling to ma1, mb1
+        g2 (float): coupling to ma2, mb2
+        ma1 (float): mass of particle 1 in channel 1
+        mb1 (float): mass of particle 2 in channel 1
+        ma2 (float): mass of particle 1 in channel 2
+        mb2 (float): mass of particle 2 in channel 2
+
+    Returns:
+        complex: Flatté amplitude
     """
     mab = atfi.sqrt(s)
     pab1 = atfk.two_body_momentum(mab, ma1, mb1)
@@ -571,12 +647,44 @@ def flatte_lineshape(s, m, g1, g2, ma1, mb1, ma2, mb2):
 def special_flatte_lineshape(
     m2, m0, gamma0, ma, mb, mc, md, dr, dd, lr, ld, barrier_factor=True
 ):
-    """
-    Flatte amplitude with Blatt-Weisskopf formfactors, 2 component mass-dependent width and orbital barriers as done in Pentaquark analysis for L(1405) that peaks below pK threshold.
-    ma = [ma1, ma2] and mb = [mb1, mb2]
-    NB: The dominant decay for a given resonance should be the 2nd channel i.e. R -> a2 b2.
-    This is because (as done in pentaquark analysis) in calculating p0 (used in Blatt-Weisskopf FF) for both channels, the dominant decay is used.
-    Another assumption made in pentaquark is equal couplings ie. gamma0_1 = gamma0_2 = gamma and only differ in phase space factors
+    r"""Flatté amplitude with Blatt-Weisskopf formfactors, 2 component mass-dependent width and orbital barriers as done in Pentaquark analysis for L(1405) that peaks below pK threshold.
+
+    .. math::
+
+        SF(m^2) = \frac{1}{m_{res}^2 - m^2 - i m_{res} \Gamma} BWFF(q) BWFF(p_{1}) ( B_r B_d )_{optional}
+
+    
+    where
+
+    .. math::
+
+        \Gamma = \Gamma_1 + \Gamma_2
+
+    
+    with :math:`\Gamma_1` and :math:`\Gamma_2` are mass-dependent widths for the two channels :math:`R \to a_1 b_1` and :math:`R \to a_2 b_2`, respectively.
+
+
+    NB: 
+    - ma = [ma1, ma2] and mb = [mb1, mb2]
+    - The dominant decay for a given resonance should be the 2nd channel i.e. R -> a2 b2. This is because (as done in pentaquark analysis) in calculating :math:`p_0` (used in Blatt-Weisskopf FF) for both channels, the dominant decay is used.
+    Another assumption made in pentaquark is equal couplings ie. :math:`\Gamma_{0-1} = \Gamma_{0-2} = \Gamma` and only differ in phase space factors
+
+    Args:
+        m2 (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        ma (list): array of masses of particle *a* (2 elements)
+        mb (list): array of masses of particle *b* (2 elements)
+        mc (float): mass of the other particle (particle *c*)
+        md (float): mass of the decaying particle
+        dr (float): barrier radius for the resonance
+        dd (float): barrier radius for the decay
+        lr (int): orbital angular momentum of the resonance
+        ld (int): orbital angular momentum of the decay
+        barrier_factor (bool, optional): multiplies the form factor for the barrier factors. Defaults to True.
+
+    Returns:
+        complex: special Flatté amplitude
     """
     ma1, ma2 = ma[0], ma[1]
     mb1, mb2 = mb[0], mb[1]
@@ -611,8 +719,31 @@ def special_flatte_lineshape(
 
 @atfi.function
 def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
-    """
-    LASS line shape, nonresonant part
+    r"""LASS line shape, nonresonant part
+
+    .. math::
+
+        LASS(m^2) = \frac{m}{q \cot \delta_b - i q}
+
+    
+    with :math:`q` is the momentum of the two-body system and :math:`\delta_b` is the scattering phase shift
+
+    .. math::
+
+        \cot \delta_b = \frac{1}{a q} + \frac{1}{2} r q
+
+
+    from `Aston et al. Nuclear Physics B, Volume 296, Issue 3 (1988), Pages 493-526 <https://doi.org/10.1016/0550-3213(88)90028-4>`_
+
+    Args:
+        m2ab (float): invariant mass squared of the system
+        a (float): parameter of the effective range term
+        r (float): parameter of the effective range term
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+
+    Returns:
+        complex: the nonresonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
     q = atfk.two_body_momentum(m, ma, mb)
@@ -623,8 +754,23 @@ def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
 
 @atfi.function
 def resonant_lass_lineshape(m2ab, m0, gamma0, a, r, ma, mb):
-    """
-    LASS line shape, resonant part
+    r"""LASS line shape, resonant part
+
+    .. math::
+
+        LASS(m^2) = \frac{BW(m^2) \cos \delta_b + i BW(m^2) \sin \delta_b}{m^2 \Gamma_0 / q_0}
+
+    Args:
+        m2ab (float): invariant mass squared of the system
+        m0 (float): resonance mass
+        gamma0 (float): resonance width
+        a (float): parameter *a* of the effective range term
+        r (float): parameter *r* of the effective range term
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+
+    Returns:
+        complex: the resonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
     q0 = atfk.two_body_momentum(m0, ma, mb)
@@ -642,8 +788,23 @@ def resonant_lass_lineshape(m2ab, m0, gamma0, a, r, ma, mb):
 
 @atfi.function
 def dabba_lineshape(m2ab, b, alpha, beta, ma, mb):
-    """
-    Dabba line shape
+    r"""Dabba line shape
+
+    .. math::
+
+        Dabba(m^2) = \frac{1 - \beta (m^2 - m_{sum}^2) + i b e^{-\alpha (m^2 - m_{sum}^2)}(m^2 - s_{Adler}) \rho}{(1 - \beta (m^2 - m_{sum}^2))^2 + (b e^{-\alpha (m^2 - m_{sum}^2)} (m^2 - s_{Adler}) \rho)^2}
+
+
+    Args:
+        m2ab (float): invariant mass squared of the system
+        b (float): parameter b
+        alpha (float): parameter alpha
+        beta (float): parameter beta
+        ma (float): mass of particle a
+        mb (float): mass of particle b
+
+    Returns:
+        complex: the Dabba amplitude
     """
     mSum = ma + mb
     m2a = ma ** 2

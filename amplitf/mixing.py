@@ -16,7 +16,7 @@
 r"""
 Formulas for building a model where meson mixing is involved.
 
-The mixing parameters for the mass eigenstates of a neutral meson ($M^0, \bar{M}^0$) are
+The mixing parameters for the mass eigenstates of a neutral meson (:math:`M^0`, :math:`\bar{M}^0`) are
 
 .. math::
 
@@ -32,7 +32,7 @@ The time evolution of the physical states is given by
 
 .. math::
     
-    |\M_i(t)>= e^{-i(m_i-i\gamma_i/2)t}|\M_i(t=0)>.
+    |M_i(t)>= e^{-i(m_i-i\gamma_i/2)t}|M_i(t=0)>.
 
 
 ... Continue explanation later
@@ -45,7 +45,7 @@ import amplitf.dynamics as atfd
 # Time evolution functions.
 @atfi.function
 def psip( t, y, tau ):
-    r"""Time evolution function $\psi_+(t)$
+    r"""Time evolution function :math:`\psi_+(t)`
 
     Args:
         t (float): decay time of the candidate
@@ -60,7 +60,7 @@ def psip( t, y, tau ):
 
 @atfi.function
 def psim( t, y, tau ):
-    r"""Time evolution function $\psi_-(t)$
+    r"""Time evolution function :math:`\psi_-(t)`
 
     Args:
         t (float): decay time of the candidate
@@ -75,7 +75,7 @@ def psim( t, y, tau ):
 
 @atfi.function
 def psii( t, x, tau ):
-    r"""Time evolution function $\psi_i(t)$
+    r"""Time evolution function :math:`\psi_i(t)`
 
     Args:
         t (float): decay time of the candidate
