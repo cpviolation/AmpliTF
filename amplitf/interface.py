@@ -121,6 +121,18 @@ def complex(re, im):
     """
     return tf.complex(re, im)
 
+# @function
+def complex_from_polar(am, ph):
+    """
+    Construct complex number from real and imaginary values
+
+    :param am: Amplitude
+    :param ph: Phase
+
+    :returns: complex number
+    """
+    return tf.complex(am * tf.cos(ph), am * tf.sin(ph))
+
 
 # @function
 def cast_complex(re):
