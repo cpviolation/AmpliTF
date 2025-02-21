@@ -245,6 +245,8 @@ def orbital_barrier_factor(p, p0, l):
         - :math:`l = 1`: :math:`\frac{p}{p_0}`
         - :math:`l \geq 2`: :math:`\left(\frac{p}{p_0}\right)^l`
 
+    n.b.: when :math:`p_0 = 0` (resonance pole outside phase space), the barrier factor is 1
+
     Args:
         p (float): momentum of the system
         p0 (float): momentum of the system assuming the resonance mass
@@ -253,7 +255,7 @@ def orbital_barrier_factor(p, p0, l):
     Returns:
         float: orbital barrier factor
     """
-    if l == 0:
+    if l == 0 or p0 == 0:
         return atfi.ones(p)
     if l == 1:
         return p / p0
