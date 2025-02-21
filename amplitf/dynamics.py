@@ -255,12 +255,9 @@ def orbital_barrier_factor(p, p0, l):
     Returns:
         float: orbital barrier factor
     """
-    if l == 0 or p0 == 0:
+    if l == 0:
         return atfi.ones(p)
-    if l == 1:
-        return p / p0
-    if l >= 2:
-        return (p / p0) ** l
+    return tf.where(p0 == 0, atfi.const(1), (p / p0) ** l)
 
 
 @atfi.function
