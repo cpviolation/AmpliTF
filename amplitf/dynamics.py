@@ -183,7 +183,7 @@ def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
 
     Returns:
         float: the squared Blatt-Weisskopf form factor
-    """    
+    """
     z = q_squared * d * d
 
     def _bw_ff_squared(x):
@@ -752,12 +752,19 @@ def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
 
 
 @atfi.function
-def resonant_lass_lineshape(m2ab, m0, gamma0, a, r, ma, mb):
+def resonant_lass_lineshape(m2ab,
+                            m0,
+                            gamma0,
+                            a,
+                            r,
+                            ma,
+                            mb,
+                            use_mass_dependent_width=False):
     r"""LASS line shape, resonant part
 
     .. math::
 
-        LASS(m^2) = \frac{BW(m^2) \cos \delta_b + i BW(m^2) \sin \delta_b}{m^2 \Gamma_0 / q_0}
+        LASS(m^2) = BW(m^2) (\cos \delta_b + i \sin \delta_b ) ( m^2 \Gamma_0 / q_0 )
 
     Args:
         m2ab (float): invariant mass squared of the system
@@ -767,6 +774,7 @@ def resonant_lass_lineshape(m2ab, m0, gamma0, a, r, ma, mb):
         r (float): parameter *r* of the effective range term
         ma (float): mass of particle a
         mb (float): mass of particle b
+        mass_dependent_width (bool, optional): if True, the width is mass dependent. Defaults to False.
 
     Returns:
         complex: the resonant LASS amplitude
@@ -777,11 +785,11 @@ def resonant_lass_lineshape(m2ab, m0, gamma0, a, r, ma, mb):
     cot_deltab = 1.0 / a / q + 1.0 / 2.0 * r * q
     phase = atfi.atan(1.0 / cot_deltab)
     width = gamma0 * q / m * m0 / q0
-    ampl = (
-        relativistic_breit_wigner(m2ab, m0, width)
-        * atfi.complex(atfi.cos(phase), atfi.sin(phase))
-        * atfi.cast_complex(m2ab * gamma0 / q0)
-    )
+    if use_mass_dependent_width:
+        width = mass_dependent_width(m, m0, gamma0, q, q0, 1.0, 0)
+    ampl = (relativistic_breit_wigner(m2ab, m0, width) *
+            atfi.complex(atfi.cos(phase), atfi.sin(phase)) *
+            atfi.cast_complex(m2ab * gamma0 / q0))
     return ampl
 
 
