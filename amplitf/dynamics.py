@@ -745,6 +745,7 @@ def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
         complex: the nonresonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
+    #q = atfk.two_body_momentum(md, m, mc)
     q = atfk.two_body_momentum(m, ma, mb)
     cot_deltab = 1.0 / a / q + 1.0 / 2.0 * r * q
     ampl = atfi.cast_complex(m) / atfi.complex(q * cot_deltab, -q)
@@ -780,6 +781,8 @@ def resonant_lass_lineshape(m2ab,
         complex: the resonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
+    # q = atfk.two_body_momentum(md, m, mc)
+    # q0 = atfk.two_body_momentum(md, m0, mc)
     q0 = atfk.two_body_momentum(m0, ma, mb)
     q = atfk.two_body_momentum(m, ma, mb)
     cot_deltab = 1.0 / a / q + 1.0 / 2.0 * r * q
