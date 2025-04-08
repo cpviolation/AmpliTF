@@ -717,7 +717,7 @@ def special_flatte_lineshape(
 
 
 @atfi.function
-def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
+def nonresonant_lass_lineshape(m2ab, a, r, md, mc):
     r"""LASS line shape, nonresonant part
 
     .. math::
@@ -745,8 +745,8 @@ def nonresonant_lass_lineshape(m2ab, a, r, ma, mb):
         complex: the nonresonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
-    #q = atfk.two_body_momentum(md, m, mc)
-    q = atfk.two_body_momentum(m, ma, mb)
+    q = atfk.two_body_momentum(md, m, mc)
+    # q = atfk.two_body_momentum(m, ma, mb)
     cot_deltab = 1.0 / a / q + 1.0 / 2.0 * r * q
     ampl = atfi.cast_complex(m) / atfi.complex(q * cot_deltab, -q)
     return ampl
@@ -758,14 +758,13 @@ def resonant_lass_lineshape(m2ab,
                             gamma0,
                             a,
                             r,
-                            ma,
-                            mb,
-                            use_mass_dependent_width=False):
+                            md,
+                            mc):
     r"""LASS line shape, resonant part
 
     .. math::
 
-        LASS(m^2) = BW(m^2) (\cos \delta_b + i \sin \delta_b ) ( m^2 \Gamma_0 / q_0 )
+        LASS(m^2) = BW(m^2) (\cos \delta_b + i \sin \delta_b ) ( m_0^2 \Gamma_0 / q_0 )
 
     Args:
         m2ab (float): invariant mass squared of the system
@@ -773,26 +772,21 @@ def resonant_lass_lineshape(m2ab,
         gamma0 (float): resonance width
         a (float): parameter *a* of the effective range term
         r (float): parameter *r* of the effective range term
-        ma (float): mass of particle a
-        mb (float): mass of particle b
-        mass_dependent_width (bool, optional): if True, the width is mass dependent. Defaults to False.
+        md (float): mass of mother particle 
+        mc (float): mass of other particle wrt resonance
 
     Returns:
         complex: the resonant LASS amplitude
     """
     m = atfi.sqrt(m2ab)
-    # q = atfk.two_body_momentum(md, m, mc)
-    # q0 = atfk.two_body_momentum(md, m0, mc)
-    q0 = atfk.two_body_momentum(m0, ma, mb)
-    q = atfk.two_body_momentum(m, ma, mb)
-    cot_deltab = 1.0 / a / q + 1.0 / 2.0 * r * q
+    q = atfk.two_body_momentum(md, m, mc)
+    q0 = atfk.two_body_momentum(md, m0, mc)
+    cot_deltab = atfi.const(1.0) / a / q + atfi.const(0.5) * r * q
     phase = atfi.atan(1.0 / cot_deltab)
     width = gamma0 * q / m * m0 / q0
-    if use_mass_dependent_width:
-        width = mass_dependent_width(m, m0, gamma0, q, q0, 1.0, 0)
     ampl = (relativistic_breit_wigner(m2ab, m0, width) *
             atfi.complex(atfi.cos(phase), atfi.sin(phase)) *
-            atfi.cast_complex(m2ab * gamma0 / q0))
+            atfi.cast_complex(m0 * m0 * gamma0 / q0))
     return ampl
 
 
