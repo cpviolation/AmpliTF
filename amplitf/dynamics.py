@@ -1007,11 +1007,12 @@ def resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles):
     m2 = tf.convert_to_tensor(m2, dtype=m_poles.dtype)
     # If m2 is scalar, expand it to shape [1]
     m2 = tf.reshape(m2, [-1])
-    denominators = atfi.pow(m_poles,2) - tf.expand_dims(m2, axis=-1)  # add one dimension for broadcasting
-    #numerators = tf.einsum('a,ai->ai', b_poles, g_poles)
-    inv_denominators = tf.einsum('ka,a->ka', atfi.cast_complex(tf.math.reciprocal(denominators)), b_poles)
-    prod_vec = tf.einsum('ka,ai->ki',inv_denominators, atfi.cast_complex(g_poles) )
+    num = tf.einsum('p,pl->lp', b_poles, atfi.cast_complex(g_poles))  # Compute A for all poles and l
+    den = atfi.cast_complex(atfi.pow(m_poles,2) - tf.expand_dims(m2, axis=-1))  # add one dimension for broadcasting
+    rat = tf.expand_dims(num, axis=0) / tf.expand_dims(den, axis=1)
+    prod_vec = tf.reduce_sum(rat,axis=2)
     return prod_vec
+
 
 @atfi.function
 def nonresonant_kmatrix_prodvec(m2, s0, fi):
@@ -1076,4 +1077,51 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod,
     kmatrix = tf.linalg.inv( identity - atfi.cast_complex(atfi.complex(0.0, 1.0)) * \
                            tf.einsum('kij,kj->kij', atfi.cast_complex(km), kmatrix_phsp(m2, masses_poles ) ) )
     kmatrix = tf.einsum('kij,kj->ki', kmatrix, km_pvec)
+    return kmatrix
+
+
+@atfi.function
+def kmatrix_lineshape(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod, masses_poles, mth):
+    r"""Calculates the K-matrix amplitude for the first pion channel
+
+    .. math::
+
+        F_1 = \sum_j \left( I - i K \rho\right)^{-1}_{1j} P_j
+
+    where _I_ is the identity matrix, _K_ is the K-matrix amplitude, _P_ is the production vector and _rho_ is the phase space factor.
+    Citation:
+        - `I. J. R. Atchinson, Nucl.Phys.A 189 (1972) 417-423<https://doi.org/10.1016/0375-9474(72)90305-3>`_
+        - `S. U. Chung et al., Annalen der Physik 507 (1995) 404<https://doi.org/10.1002/andp.19955070504>`_
+        - `V. V. Anisovich and A. V. Sarantsev, Eur. Phys. J. A16 (2003) 229<https://arxiv.org/abs/hep-ph/0204328>`_
+
+    Args:
+        m2 (array): tensor of invariant mass squared of the system
+        m_poles (array): array of the pole masses
+        g_poles (array): array of the pole couplings
+        s0 (float): scattering parameter (:math:`s_0^{scat}`)
+        fij (array): non resonant coupling constants (:math:`f_{ij}`)
+        b_poles (array): array of production strength of the poles
+        s0_prod (float): scattering parameter for production vector (:math:`s_0^{prod}`)
+        fi_prod (array): non resonant coupling constants for production vector (:math:`f_{i}`)
+        masses_poles (array): array of masses of the particles in the final state
+        mth (float): threshold value for the phase space factor
+
+    Returns:
+        array: array of the K-matrix amplitude for each pion channel
+    """
+    # K-matrix
+    km = resonant_kmatrix(m2, m_poles, g_poles) + \
+         nonresonant_kmatrix(m2, s0, fij)
+    km = tf.einsum( 'k,kij->kij', adler_zero(m2, mth), km )
+    # Production vector
+    km_pvec = resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles) + \
+              nonresonant_kmatrix_prodvec(m2, s0_prod, fi_prod)
+    # create the transition matrix
+    identity = tf.eye(5, dtype=atfi.ctype())
+    Tmatrix = identity - atfi.cast_complex(atfi.complex(0.0, 1.0)) * \
+              tf.einsum('kij,kj->kij', atfi.cast_complex(km), kmatrix_phsp(m2, masses_poles ))
+    # compute the inverse matrix first row
+    kmatrix = tf.linalg.solve(Tmatrix, tf.eye(5, batch_shape=[Tmatrix.shape[0]], dtype=atfi.ctype()))
+    # compute the product of the inverse matrix times the production vector
+    kmatrix = tf.einsum('kj,kj->k', kmatrix[:, 0, :], km_pvec)
     return kmatrix
