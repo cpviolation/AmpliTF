@@ -980,9 +980,9 @@ def kmatrix_phsp(m2, masses):
     km_phsp = tf.stack([
         kmatrix_phsp_twobody(m2, masses[0][0], masses[0][1]),
         kmatrix_phsp_twobody(m2, masses[1][0], masses[1][1]),
-        kmatrix_phsp_twobody(m2, masses[2][0], masses[2][1]),
+        kmatrix_phsp_fourbody(m2, masses[2][0]),
         kmatrix_phsp_twobody(m2, masses[3][0], masses[3][1]),
-        kmatrix_phsp_fourbody(m2, masses[4][0])
+        kmatrix_phsp_twobody(m2, masses[4][0], masses[4][1])
     ], axis=1)
     return km_phsp
 
@@ -1073,8 +1073,7 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod,
     # Create the identity matrix of shape (5, 5)
     identity = tf.eye(5, dtype=atfi.ctype())
     # Compute the operation I - i * rho * KM
-    km_phsp = tf.einsum('ki,ij->kij', kmatrix_phsp(m2, masses_poles ), identity)
     kmatrix = tf.linalg.inv( identity - atfi.cast_complex(atfi.complex(0.0, 1.0)) * \
-                           tf.einsum('kij,kij->kij', km_phsp, atfi.cast_complex(km)) )
+                           tf.einsum('kij,kj->kij', atfi.cast_complex(km), kmatrix_phsp(m2, masses_poles ) ) )
     kmatrix = tf.einsum('kij,kj->ki', kmatrix, km_pvec)
     return kmatrix
