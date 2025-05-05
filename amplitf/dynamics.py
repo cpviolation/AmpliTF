@@ -844,7 +844,7 @@ def build_spline_lineshape(degree, nodes):
 
 
 @atfi.function
-def adler_zero(m2, ma, sA0 = atfi.const(-0.15), sA = atfi.const(1.0)):
+def adler_zero(m2, sA = atfi.const(1.0), sA0 = atfi.const(-0.15), mth=atfi.const(0.13957)):
     r"""Suppress the non-physical singularity below the ππ threshold (Adler zero)
 
     .. math::
@@ -853,15 +853,15 @@ def adler_zero(m2, ma, sA0 = atfi.const(-0.15), sA = atfi.const(1.0)):
 
     Args:
         m2 (float): invariant mass squared of the system
-        ma (float): pion mass
-        sA0 (float, optional): _description_. Defaults to atfi.const(-0.15).
-        sA (float, optional): _description_. Defaults to atfi.const(1.0).
+        sA (float, optional): parameter. Defaults to atfi.const(1.0).
+        sA0 (float, optional): parameter. Defaults to atfi.const(-0.15).
+        mth (float): kinematic threshold for the system. Defaults to atfi.const(0.13957).
 
     Returns:
         float: suppression factor
     """
     azero = ( atfi.const(1.0) - sA0 ) / (m2 - sA0) * \
-        (m2 - atfi.const(0.5) * sA * ma * ma)
+        (m2 - atfi.const(0.5) * sA * mth**2)
     return azero
 
 
@@ -884,16 +884,17 @@ def resonant_kmatrix(m2, m_poles, g_poles):
     """
     m2 = tf.convert_to_tensor(m2, dtype=m_poles.dtype)
     # If m2 is scalar, expand it to shape [1]
-    m2 = tf.reshape(m2, [-1])
-    denominators = atfi.pow(m_poles,2) - tf.expand_dims(m2, axis=-1)  # add one dimension for broadcasting
-    numerators = tf.einsum('ai,aj->aij', g_poles, g_poles)
-    inv_denominators = tf.math.reciprocal(denominators)
-    kmatrix = tf.einsum('ka,aij->kij',inv_denominators, numerators )
-    return kmatrix
+    m2 = tf.reshape(m2, [-1]) # [k]
+    m_poles_exp = tf.expand_dims(m_poles, axis=0)  # [1, n]
+    m2_exp = tf.expand_dims(m2, axis=1)  # [k, 1]
+    denom = tf.expand_dims(tf.expand_dims(m_poles_exp**2 - m2_exp, axis=1), axis=1) # [k, 1, 1, n]
+    numerator = tf.expand_dims(tf.einsum('ia,ja->ija', g_poles, g_poles), axis=0) # [1, n, n, n]
+    res = tf.reduce_sum(numerator / denom, axis=3) # [k, n, n]
+    return res
 
 
 @atfi.function
-def nonresonant_kmatrix(m2, s0, fij):
+def nonresonant_kmatrix(m2, fscat, s0):
     r"""
     Calculates the non-resonant part of the K-Matrix amplitude:
     
@@ -903,15 +904,50 @@ def nonresonant_kmatrix(m2, s0, fij):
     
     Args:
         m2: squared mass of the system (:math:`m^2`)
+        fscat (Tensor): non resonant coupling constants (:math:`f_{ij}`)
         s0 (float): scattering parameter (:math:`s_0^{scat}`)
-        fij (Tensor): non resonant coupling constants (:math:`f_{ij}`)
 
     Returns:
         Tensor: result of the sum for each pair of poles    
     """
-    sfactor = (atfi.const(1.0) - s0) / (m2 - s0)
-    kmatrix = tf.einsum('k,ij->kij', sfactor, fij)
-    return kmatrix
+    m2 = tf.convert_to_tensor(m2, dtype=fscat.dtype)
+    # If m2 is scalar, expand it to shape [1]
+    m2 = tf.reshape(m2, [-1]) # [k]
+    m2_exp = tf.expand_dims(tf.expand_dims(m2, axis=1), axis=2)
+    fscat_exp = tf.expand_dims(fscat, axis=0)
+    nr = fscat_exp*(atfi.const(1.0)-s0)/(m2_exp-s0)
+    return nr
+
+
+@atfi.function
+def kmatrix(m2, m_poles, g_poles, fscat, s0,
+            sA = atfi.const(1.0),
+            sA0 = atfi.const(-0.15),
+            mth=atfi.const(0.13957)):
+    r"""Calculates the K-matrix
+
+
+    .. math::
+
+        K_{ij}(s) = \left\{\sum_{\alpha}\frac{g_i^{(\alpha)}g_j^{(\alpha)}}{m_{\alpha}^2-s} + f_{ij}^{\text{scat}}\frac{1.0 -s_0^{\text{scat}}}{s -s_0^{\text{scat}}}\right\} \frac{1-s_{A0}}{s-s_{A0}}(s-s_Am^2_{\pi}/2)
+        
+    Args:
+        m2: squared mass of the system (:math:`m^2`)
+        m_poles (Tensor): array of pole masses (:math:`m_{\alpha}`)
+        g_poles (Tensor): coupling constants (:math:`g_{\alpha i}`)
+        fscat (Tensor): non resonant coupling constants (:math:`f_{ij}`)
+        s0 (float): scattering parameter (:math:`s_0^{scat}`)
+        sA (float, optional): parameter. Defaults to atfi.const(1.0).
+        sA0 (float, optional): parameter. Defaults to atfi.const(-0.15).
+        mth (float): kinematic threshold for the system. Defaults to atfi.const(0.13957).
+
+    Returns:
+        Tensor: a nxn matrix for each value of m2
+    """    
+    nr = nonresonant_kmatrix(m2, fscat, s0)
+    res = resonant_kmatrix(m2, m_poles, g_poles)
+    sf = tf.expand_dims(tf.expand_dims(adler_zero(m2, sA, sA0, mth), axis=1), axis=2) # [k, 1, 1]
+    return (res + nr) * sf
 
 
 @atfi.function
@@ -929,11 +965,12 @@ def kmatrix_phsp_twobody(m2, ma, mb):
     Returns:
         complex: the phase space factor
     """
-    km_phsp = atfi.sqrt( atfi.cast_complex((atfi.const(1.0) - atfi.pow(ma+mb,2)/m2) * (atfi.const(1.0) - atfi.pow(ma-mb,2)/m2)) )
+    km_phsp = atfi.sqrt( atfi.cast_complex((atfi.const(1.0) - atfi.pow(ma+mb,2)/m2)) )
+    #km_phsp = atfi.sqrt( atfi.cast_complex((atfi.const(1.0) - atfi.pow(ma+mb,2)/m2) * (atfi.const(1.0) - atfi.pow(ma-mb,2)/m2)) )
     return km_phsp
 
 @atfi.function
-def kmatrix_phsp_fourbody(m2, ma):
+def kmatrix_phsp_multimeson(m2, ma):
     r"""Calculates the phase space factor for the K-matrix in the case of two-body pole
 
     .. math::
@@ -952,15 +989,15 @@ def kmatrix_phsp_fourbody(m2, ma):
     Args:
         m2 (float): the invariant mass squared of the system
         ma (float): the mass of particle a
-        mb (float): the mass of particle b
 
     Returns:
         complex: the phase space factor
     """
-    km_phsp = tf.where(m2>1, atfi.sqrt( atfi.cast_complex((m2 - 16*ma*ma)/m2) ), 
-                      atfi.cast_complex(0.0005- 0.0193*m2 + 0.1385*m2*m2 - 0.2084*m2*m2*m2 - \
-                      0.2974*m2*m2*m2*m2 + 0.1366*m2*m2*m2*m2*m2 + 1.0789*m2*m2*m2*m2*m2*m2) )
+    km_phsp = tf.where(m2 > 1.0, atfi.sqrt(atfi.cast_complex(atfi.const(1.0) - 16.0*ma**2/m2)), 
+                                atfi.cast_complex(0.0005- 0.0193*m2 + 0.1385*m2**2 - 0.2084*m2**3 - \
+                                0.2974*m2**4 + 0.1366*m2**5 + 1.0789*m2**6) )
     return km_phsp
+
 
 @atfi.function
 def kmatrix_phsp(m2, masses):
@@ -980,7 +1017,7 @@ def kmatrix_phsp(m2, masses):
     km_phsp = tf.stack([
         kmatrix_phsp_twobody(m2, masses[0][0], masses[0][1]),
         kmatrix_phsp_twobody(m2, masses[1][0], masses[1][1]),
-        kmatrix_phsp_fourbody(m2, masses[2][0]),
+        kmatrix_phsp_multimeson(m2, masses[2][0]),
         kmatrix_phsp_twobody(m2, masses[3][0], masses[3][1]),
         kmatrix_phsp_twobody(m2, masses[4][0], masses[4][1])
     ], axis=1)
@@ -1007,11 +1044,13 @@ def resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles):
     m2 = tf.convert_to_tensor(m2, dtype=m_poles.dtype)
     # If m2 is scalar, expand it to shape [1]
     m2 = tf.reshape(m2, [-1])
-    denominators = atfi.pow(m_poles,2) - tf.expand_dims(m2, axis=-1)  # add one dimension for broadcasting
-    #numerators = tf.einsum('a,ai->ai', b_poles, g_poles)
-    inv_denominators = tf.einsum('ka,a->ka', atfi.cast_complex(tf.math.reciprocal(denominators)), b_poles)
-    prod_vec = tf.einsum('ka,ai->ki',inv_denominators, atfi.cast_complex(g_poles) )
-    return prod_vec
+    b_poles_exp = tf.expand_dims(b_poles, axis=0) # [1, n]
+    m_poles_exp = tf.expand_dims(m_poles, axis=0) # [1, n]
+    m2_exp = tf.expand_dims(m2, axis=1) # [k, 1]
+    ta = b_poles_exp / atfi.cast_complex(m_poles_exp**2 - m2_exp) # [k, n]
+    res = tf.einsum('kj,ij->ki', ta, atfi.cast_complex(g_poles)) # [k, n]
+    return res
+
 
 @atfi.function
 def nonresonant_kmatrix_prodvec(m2, s0, fi):
@@ -1029,13 +1068,41 @@ def nonresonant_kmatrix_prodvec(m2, s0, fi):
     Returns:
         array: result of the sum of each poles
     """
-    sfactor = (atfi.const(1.0) - s0) / (m2 - s0)
-    prod_vec = tf.einsum('k,i->ki', atfi.cast_complex(sfactor), fi)
-    return prod_vec
+    m2_exp = tf.expand_dims(m2, axis=1) # [k, 1]
+    fi_exp = tf.expand_dims(fi, axis=0) # [1, n]
+    nr = fi_exp*atfi.cast_complex((atfi.const(1.0)-s0)/(m2_exp-s0))
+    return nr
 
 
 @atfi.function
-def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod, masses_poles, mth):
+def kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod):
+    r"""Calculates the K-matrix production vector
+
+    .. math::
+
+        P_j(s) = \sum_{\alpha}\frac{\beta_{\alpha}g_j^{(\alpha)}}{m_{\alpha}^2-s} + f_{1j}^{\text{prod}}\frac{1.0 -s_0^{\text{prod}}}{s -s_0^{\text{prod}}}
+        
+    Args:
+        m2 (float): invariant mass squared of the system
+        m_poles (array): array of pole masses
+        g_poles (array): matrix of coupling constants
+        b_poles (array): array of production strength of the poles
+        s0_prod (float): scattering parameter for production vector (:math:`s_0^{prod}`)
+        fi_prod (Tensor): non resonant coupling constants for production vector (:math:`f_{i}`)
+
+    Returns:
+        array: result of the sum of each poles
+    """
+    km_pvec = resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles) + \
+        nonresonant_kmatrix_prodvec(m2, s0_prod, fi_prod)
+    return km_pvec
+
+
+@atfi.function
+def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod, masses_poles,
+            sA = atfi.const(1.0),
+            sA0 = atfi.const(-0.15),
+            mth = atfi.const(0.13957)):
     r"""Calculates the K-matrix amplitude
 
     .. math::
@@ -1053,7 +1120,7 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod,
         m_poles (array): array of the pole masses
         g_poles (array): array of the pole couplings
         s0 (float): scattering parameter (:math:`s_0^{scat}`)
-        fij (array): non resonant coupling constants (:math:`f_{ij}`)
+        fscat (array): non resonant coupling constants (:math:`f_{ij}`)
         b_poles (array): array of production strength of the poles
         s0_prod (float): scattering parameter for production vector (:math:`s_0^{prod}`)
         fi_prod (array): non resonant coupling constants for production vector (:math:`f_{i}`)
@@ -1064,16 +1131,62 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fij, b_poles, s0_prod, fi_prod,
         array: array of the K-matrix amplitude for each pion channel
     """
     # K-matrix
-    km = resonant_kmatrix(m2, m_poles, g_poles) + \
-         nonresonant_kmatrix(m2, s0, fij)
-    km = tf.einsum( 'k,kij->kij', adler_zero(m2, mth), km )
-    # Production vector
-    km_pvec = resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles) + \
-              nonresonant_kmatrix_prodvec(m2, s0_prod, fi_prod)
+    km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
+    # phase-space factor
+    rho = kmatrix_phsp(m2, masses_poles)
     # Create the identity matrix of shape (5, 5)
-    identity = tf.eye(5, dtype=atfi.ctype())
-    # Compute the operation I - i * rho * KM
-    kmatrix = tf.linalg.inv( identity - atfi.cast_complex(atfi.complex(0.0, 1.0)) * \
-                           tf.einsum('kij,kj->kij', atfi.cast_complex(km), kmatrix_phsp(m2, masses_poles ) ) )
-    kmatrix = tf.einsum('kij,kj->ki', kmatrix, km_pvec)
-    return kmatrix
+    identity = tf.expand_dims(tf.eye(5, dtype=atfi.ctype()), axis=0)  # [1, 5, 5]
+    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho)
+    D = tf.linalg.inv(invD)
+    # Production vector
+    km_pvec = kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
+    km_amps = tf.einsum('kij,kj->ki', D, km_pvec)
+    return km_amps
+
+
+@atfi.function
+def kmatrix_lineshape(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod, masses_poles,
+            sA = atfi.const(1.0),
+            sA0 = atfi.const(-0.15),
+            mth = atfi.const(0.13957)):
+    r"""Calculates the K-matrix amplitude for the first pole only
+
+    .. math::
+
+        F_1 = \sum_j \left( I - i K \rho\right)^{-1}_{1j} P_j
+
+    where _I_ is the identity matrix, _K_ is the K-matrix amplitude, _P_ is the production vector and _rho_ is the phase space factor.
+    Citation:
+        - `I. J. R. Atchinson, Nucl.Phys.A 189 (1972) 417-423<https://doi.org/10.1016/0375-9474(72)90305-3>`_
+        - `S. U. Chung et al., Annalen der Physik 507 (1995) 404<https://doi.org/10.1002/andp.19955070504>`_
+        - `V. V. Anisovich and A. V. Sarantsev, Eur. Phys. J. A16 (2003) 229<https://arxiv.org/abs/hep-ph/0204328>`_
+
+    Args:
+        m2 (array): tensor of invariant mass squared of the system
+        m_poles (array): array of the pole masses
+        g_poles (array): array of the pole couplings
+        s0 (float): scattering parameter (:math:`s_0^{scat}`)
+        fscat (array): non resonant coupling constants (:math:`f_{ij}`)
+        b_poles (array): array of production strength of the poles
+        s0_prod (float): scattering parameter for production vector (:math:`s_0^{prod}`)
+        fi_prod (array): non resonant coupling constants for production vector (:math:`f_{i}`)
+        masses_poles (array): array of masses of the particles in the final state
+        mth (float): threshold value for the phase space factor
+
+    Returns:
+        array: array of the K-matrix amplitude for each pion channel
+    """
+    # K-matrix
+    km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
+    # phase-space factor
+    c_identity = tf.eye(m_poles.shape[0], dtype=atfi.ctype())
+    rho = kmatrix_phsp(m2, masses_poles) # [k, n]
+    rho = tf.einsum('ij,ki->kij', c_identity, rho) # [k, n, n]
+    # Create the identity matrix of shape (1, n, n)
+    identity = tf.expand_dims(c_identity, axis=0)  # [1, n, n]
+    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho)
+    D = tf.linalg.inv(invD)
+    # Production vector
+    km_pvec = kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
+    km_amp = tf.einsum('kj,kj->k', D[:,0], km_pvec)
+    return km_amp
