@@ -77,7 +77,7 @@ def helicity_amplitude(x, spin):
         complex: the helicity amplitude
     """
     if spin == 0:
-        return atfi.complex(atfi.const(1.0), atfi.const(0.0))
+        return atfi.complex(atfi.ones(x), atfi.const(0.0))
     if spin == 1:
         return atfi.complex(x, atfi.const(0.0))
     if spin == 2:
@@ -148,7 +148,7 @@ def blatt_weisskopf_ff(q, q0, d, l):
 
     def hankel1(x):
         if l == 0:
-            return atfi.const(1.0)
+            return atfi.ones(x)
         if l == 1:
             return 1 + x * x
         if l == 2:
@@ -188,7 +188,7 @@ def blatt_weisskopf_ff_squared(q_squared, d, l_orbit):
 
     def _bw_ff_squared(x):
         if l_orbit == 0:
-            return atfi.const(1.0)
+            return atfi.ones(x)
         if l_orbit == 1:
             return (2 * x) / (x + 1)
         if l_orbit == 2:
@@ -885,11 +885,11 @@ def resonant_kmatrix(m2, m_poles, g_poles):
     m2 = tf.convert_to_tensor(m2, dtype=m_poles.dtype)
     # If m2 is scalar, expand it to shape [1]
     m2 = tf.reshape(m2, [-1]) # [k]
-    m_poles_exp = tf.expand_dims(m_poles, axis=0)  # [1, n]
-    m2_exp = tf.expand_dims(m2, axis=1)  # [k, 1]
-    denom = tf.expand_dims(tf.expand_dims(m_poles_exp**2 - m2_exp, axis=1), axis=1) # [k, 1, 1, n]
-    numerator = tf.expand_dims(tf.einsum('ia,ja->ija', g_poles, g_poles), axis=0) # [1, n, n, n]
-    res = tf.reduce_sum(numerator / denom, axis=3) # [k, n, n]
+    numerator = tf.expand_dims(g_poles, axis=1) * tf.expand_dims(g_poles, axis=2)  # shape (5, 5, 5)
+    denominator = tf.expand_dims(m_poles, axis=1)**2 - tf.expand_dims(m2, axis=0)  # shape (5, k)
+    # Sum over pole_index (axis 0)
+    res = tf.reduce_sum(numerator[:, :, :, None] / denominator[:, None, None, :], axis=0)  # shape (5, 5, k)
+    res = tf.transpose(res, perm=[2, 0, 1])  # shape (k, 5, 5)
     return res
 
 
@@ -1044,11 +1044,11 @@ def resonant_kmatrix_prodvec(m2, m_poles, g_poles, b_poles):
     m2 = tf.convert_to_tensor(m2, dtype=m_poles.dtype)
     # If m2 is scalar, expand it to shape [1]
     m2 = tf.reshape(m2, [-1])
-    b_poles_exp = tf.expand_dims(b_poles, axis=0) # [1, n]
-    m_poles_exp = tf.expand_dims(m_poles, axis=0) # [1, n]
-    m2_exp = tf.expand_dims(m2, axis=1) # [k, 1]
-    ta = b_poles_exp / atfi.cast_complex(m_poles_exp**2 - m2_exp) # [k, n]
-    res = tf.einsum('kj,ij->ki', ta, atfi.cast_complex(g_poles)) # [k, n]
+    A = b_poles[:, None] * atfi.cast_complex(g_poles)  # shape (5, 5)
+    B = m_poles[:, None]**2 - m2[None, :]  # shape (5, k)
+    res = (A[:, :, None] / atfi.cast_complex(B[:, None, :]))  # shape (5, 5, k)
+    res = tf.reduce_sum(res, axis=0)  # shape (5, k)
+    res = tf.transpose(res)     # shape (k, 5)
     return res
 
 
@@ -1133,13 +1133,14 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_pro
     # K-matrix
     km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
     # phase-space factor
-    rho = kmatrix_phsp(m2, masses_poles)
-    # Create the identity matrix of shape (5, 5)
-    identity = tf.expand_dims(tf.eye(5, dtype=atfi.ctype()), axis=0)  # [1, 5, 5]
-    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho)
+    rho = kmatrix_phsp(m2, masses_poles) # [k, n]
+    rho = rho_diag = tf.linalg.diag(rho) # [k, n, n]
+    # Create the identity matrix of shape (1, n, n)
+    identity = tf.eye(5, dtype=atfi.ctype())[None, :, :]  # [1, n, n]
+    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho_diag)
     D = tf.linalg.inv(invD)
     # Production vector
-    km_pvec = kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
+    km_pvec =kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
     km_amps = tf.einsum('kij,kj->ki', D, km_pvec)
     return km_amps
 
@@ -1179,14 +1180,13 @@ def kmatrix_lineshape(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod
     # K-matrix
     km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
     # phase-space factor
-    c_identity = tf.eye(m_poles.shape[0], dtype=atfi.ctype())
     rho = kmatrix_phsp(m2, masses_poles) # [k, n]
-    rho = tf.einsum('ij,ki->kij', c_identity, rho) # [k, n, n]
+    rho = rho_diag = tf.linalg.diag(rho) # [k, n, n]
     # Create the identity matrix of shape (1, n, n)
-    identity = tf.expand_dims(c_identity, axis=0)  # [1, n, n]
-    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho)
+    identity = tf.eye(5, dtype=atfi.ctype())[None, :, :]  # [1, n, n]
+    invD = identity - 1j*tf.matmul(atfi.cast_complex(km), rho_diag)
     D = tf.linalg.inv(invD)
     # Production vector
-    km_pvec = kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
+    km_pvec =kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod)
     km_amp = tf.einsum('kj,kj->k', D[:,0], km_pvec)
     return km_amp
