@@ -45,7 +45,7 @@ import amplitf.dynamics as atfd
 # Time evolution functions.
 @atfi.function
 def psip( t, y, tau ):
-    r"""Time evolution function :math:`\psi_+(t)`
+    r"""Time evolution function :math:`\psi_+(t) = e^{-t}e^{(1+y)}`
 
     Args:
         t (float): decay time of the candidate
@@ -60,7 +60,7 @@ def psip( t, y, tau ):
 
 @atfi.function
 def psim( t, y, tau ):
-    r"""Time evolution function :math:`\psi_-(t)`
+    r"""Time evolution function :math:`\psi_-(t) = e^{-t}e^{(1-y)}`
 
     Args:
         t (float): decay time of the candidate
@@ -75,7 +75,7 @@ def psim( t, y, tau ):
 
 @atfi.function
 def psii( t, x, tau ):
-    r"""Time evolution function :math:`\psi_i(t)`
+    r"""Time evolution function :math:`\psi_i(t) = e^{-t}e^{(1+ix)}`
 
     Args:
         t (float): decay time of the candidate
@@ -91,7 +91,18 @@ def psii( t, x, tau ):
 # Probability density
 def mixing_density(ampl_dir, ampl_cnj, qoverp,
                    time_evolution_pos, time_evolution_neg, time_evolution_int):
-    """Calculates the probability density of the mixing
+    r"""Calculates the probability density of the mixing
+
+    ..math::
+
+        |\braket{f|\mathcal{H}|\Mz(t)}|^2=\psi_+(t)|A_1|^2 + \psi_-(t)|A_2|^2 + 2\Real\left(\psi_i(t)A_1A^*_2\right)
+
+    where :math:`\psi_+(t)` and :math:`\psi_-(t)` are the time evolution functions for the direct and conjugate decays, respectively, and :math:`\psi_i(t)` is the interference term.
+    The amplitudes :math:`A_1` and :math:`A_2` are the sum and difference of the direct and conjugate decay amplitudes:
+
+    ..math::
+
+        A_1 = \frac{1}{2}\left(\Af + \frac{q}{p}\Abf\right)\qquad A_2 = \frac{1}{2}\left(\Af - \frac{q}{p}\Abf\right)
 
     Args:
         ampl_dir (complex): amplitude of the direct decay

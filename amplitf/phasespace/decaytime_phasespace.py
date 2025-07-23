@@ -70,6 +70,35 @@ class DecayTimePhaseSpace:
         which has to be run within TF session.
         """
         return self.filter(self.unfiltered_sample(size, maximum))
+    
+    @atfi.function
+    def unfiltered_acceptance_sample(self, function, pars, size, maximum=None):
+        """
+        Generate a sample of point within phase space with an acceptance function.
+          function : the function to generate the sample with, it should be a TF function
+          pars     : parameters for the function
+          size     : number of _initial_ points to generate. Not all of them will fall into phase space,
+                     so the number of points in the output will be <size.
+          maximum  : if maximum>0, add 3rd dimension to the generated tensor which is
+                     uniform number from 0 to majorant. Useful for accept-reject toy MC.
+        """
+        v = [function([size], *pars, dtype=atfi.fptype())]
+        if maximum is not None:
+            v += [tf.random.uniform([size], 0.0, maximum, dtype=atfi.fptype())]
+        return tf.stack(v, axis=1)
+    
+    @atfi.function
+    def acceptance_sample(self, function, pars, size, maximum=None):
+        """
+        Generate uniform sample of point within phase space.
+          size     : number of _initial_ points to generate. Not all of them will fall into phase space,
+                     so the number of points in the output will be <size.
+          majorant : if majorant>0, add 3rd dimension to the generated tensor which is
+                     uniform number from 0 to majorant. Useful for accept-reject toy MC.
+        Note it does not actually generate the sample, but returns the data flow graph for generation,
+        which has to be run within TF session.
+        """
+        return self.filter(self.unfiltered_acceptance_sample(function, pars, size, maximum))
 
     def dimensionality(self):
         return 1
