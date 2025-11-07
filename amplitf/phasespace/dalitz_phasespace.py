@@ -22,7 +22,8 @@ import amplitf.kinematics as atfk
 
 class DalitzPhaseSpace:
     """
-    Class for Dalitz plot (2D) phase space for the 3-body decay D->ABC
+    Dalitz plot (2D) phase space for the 3-body decay D->ABC.
+    Now including the acc (ε(s) * f(t|s)).
     """
 
     def __init__(
@@ -76,6 +77,14 @@ class DalitzPhaseSpace:
                 self.maxbc = mbcrange[1] ** 2
             if mbcrange[0] ** 2 > self.minbc:
                 self.minbc = mbcrange[0] ** 2
+
+        # --- Acceptance configuration (all parameters are user-configurable) ---
+        self._acc_cfg = {
+            "acc_model": None,   # object returned by acceptance_combined.make_time_model
+            "rho": 0.8,          # time–Dalitz correlation coefficient 
+            "alpha": 1.4,        # exponent of the efficiency term ε_s(z) ~ z^alpha
+            "eps_min": 0.05,     # minimum efficiency value on the Dalitz plot
+        }
 
     @atfi.function
     def inside(self, x):
@@ -137,7 +146,6 @@ class DalitzPhaseSpace:
             tf.random.uniform([size], self.minab, self.maxab, dtype=atfi.fptype()),
             tf.random.uniform([size], self.minbc, self.maxbc, dtype=atfi.fptype()),
         ]
-
         if maximum is not None:
             v += [tf.random.uniform([size], 0.0, maximum, dtype=atfi.fptype())]
         return tf.stack(v, axis=1)
@@ -154,6 +162,25 @@ class DalitzPhaseSpace:
         which has to be run within TF session.
         """
         return self.filter(self.unfiltered_sample(size, maximum))
+
+    @atfi.function
+    def unfiltered_acceptance_sample(self, function, pars, size, maximum=None):
+        """
+        Generate candidate points (m2ab, m2bc) via a generation/acceptance function.
+        Expected signature: function([size], *pars, dtype=atfi.fptype()) -> (m2ab, m2bc)
+        """
+        m2ab, m2bc = function([size], *pars, dtype=atfi.fptype())
+        v = [m2ab, m2bc]
+        if maximum is not None:
+            v += [tf.random.uniform([size], 0.0, maximum, dtype=atfi.fptype())]
+        return tf.stack(v, axis=1)
+
+    @atfi.function
+    def acceptance_sample(self, function, pars, size, maximum=None):
+        """
+        Same as unfiltered_acceptance_sample, but filtered to phase space.
+        """
+        return self.filter(self.unfiltered_acceptance_sample(function, pars, size, maximum))
 
     @atfi.function
     def rectangular_grid_sample(self, size_ab, size_bc, space_to_sample="DP"):
@@ -224,58 +251,43 @@ class DalitzPhaseSpace:
 
     @atfi.function
     def m2ab(self, sample):
-        """
-        Return m2ab variable (vector) for the input sample
-        """
+        """Return m2ab for the input sample."""
         return sample[..., 0]
 
     @atfi.function
     def m2bc(self, sample):
-        """
-        Return m2bc variable (vector) for the input sample
-        """
+        """Return m2bc for the input sample."""
         return sample[..., 1]
 
     @atfi.function
     def m2ac(self, sample):
-        """
-        Return m2ac variable (vector) for the input sample.
-        It is calculated from m2ab and m2bc
-        """
+        """Return m2ac = mD^2 + mA^2 + mB^2 + mC^2 - m2ab - m2bc."""
         return self.msqsum - self.m2ab(sample) - self.m2bc(sample)
 
     @atfi.function
     def cos_helicity_ab(self, sample):
-        """
-        Calculate cos(helicity angle) of the AB resonance
-        """
+        """cos(helicity angle) of the AB resonance."""
         return atfk.cos_helicity_angle_dalitz(
             self.m2ab(sample), self.m2bc(sample), self.md, self.ma, self.mb, self.mc
         )
 
     @atfi.function
     def cos_helicity_bc(self, sample):
-        """
-        Calculate cos(helicity angle) of the BC resonance
-        """
+        """cos(helicity angle) of the BC resonance."""
         return atfk.cos_helicity_angle_dalitz(
             self.m2bc(sample), self.m2ac(sample), self.md, self.mb, self.mc, self.ma
         )
 
     @atfi.function
     def cos_helicity_ac(self, sample):
-        """
-        Calculate cos(helicity angle) of the AC resonance
-        """
+        """cos(helicity angle) of the AC resonance."""
         return atfk.cos_helicity_angle_dalitz(
             self.m2ac(sample), self.m2ab(sample), self.md, self.mc, self.ma, self.mb
         )
 
     @atfi.function
     def m_prime_ac(self, sample):
-        """
-        Square Dalitz plot variable m'
-        """
+        """Square Dalitz plot variable m' (AC)."""
         mac = atfi.sqrt(self.m2ac(sample))
         return (
             atfi.acos(
@@ -289,16 +301,12 @@ class DalitzPhaseSpace:
 
     @atfi.function
     def theta_prime_ac(self, sample):
-        """
-        Square Dalitz plot variable theta'
-        """
+        """Square Dalitz plot variable θ' (AC)."""
         return atfi.acos(self.cos_helicity_ac(sample)) / math.pi
 
     @atfi.function
     def m_prime_ab(self, sample):
-        """
-        Square Dalitz plot variable m'
-        """
+        """Square Dalitz plot variable m' (AB)."""
         mab = atfi.sqrt(self.m2ab(sample))
         return (
             atfi.acos(
@@ -313,8 +321,8 @@ class DalitzPhaseSpace:
     @atfi.function
     def from_square_dalitz_plot(self, mprimeac, thprimeac):
         """
-        sample: Given mprimeac and thprimeac, returns 2D tensor for (m2ab, m2bc).
-        Make sure you don't pass in sqDP corner points as they lie outside phsp.
+        Given mprimeac and thprimeac, returns tensor (m2ab, m2bc).
+        Não passe pontos de canto do sqDP (fora do espaço físico).
         """
         m2AC = (
             0.25
@@ -375,7 +383,7 @@ class DalitzPhaseSpace:
 
         diff_AC = tf.cast(atfi.sqrt(self.maxac) - atfi.sqrt(self.minac), atfi.fptype())
         mAC = atfi.const(0.5) * diff_AC * (
-            Const(1.0) + atfi.cos(atfi.pi() * mPrime)
+            atfi.const(1.0) + atfi.cos(atfi.pi() * mPrime)
         ) + tf.cast(atfi.sqrt(self.minac), atfi.fptype())
         mACSq = mAC * mAC
 
@@ -401,8 +409,8 @@ class DalitzPhaseSpace:
         pAcmsAC = atfi.sqrt(eAcmsAC ** 2.0 - tf.cast(self.ma2, atfi.fptype()))
         pBcmsAC = atfi.sqrt(eBcmsAC ** 2.0 - tf.cast(self.mb2, atfi.fptype()))
 
-        deriv1 = Pi() * atfi.const(0.5) * diff_AC * atfi.sin(atfi.pi() * mPrime)
-        deriv2 = Pi() * atfi.sin(atfi.pi() * thPrime)
+        deriv1 = atfi.pi() * atfi.const(0.5) * diff_AC * atfi.sin(atfi.pi() * mPrime)
+        deriv2 = atfi.pi() * atfi.sin(atfi.pi() * thPrime)
 
         return atfi.const(4.0) * pAcmsAC * pBcmsAC * mAC * deriv1 * deriv2
 
@@ -462,7 +470,6 @@ class DalitzPhaseSpace:
         (decay is in x-z plane, particle A moves along z axis)
           m2ab, m2bc : invariant masses of AB and BC combinations
         """
-
         m2ac = self.msqsum - m2ab - m2bc
 
         p_a = atfk.two_body_momentum(self.md, self.ma, atfi.sqrt(m2bc))
@@ -497,5 +504,67 @@ class DalitzPhaseSpace:
     def dimensionality(self):
         return 2
 
-    def bounds(self) :
+    def bounds(self):
         return [(self.minab, self.maxab), (self.minbc, self.maxbc)]
+
+    # ===================== PUBLIC API: ACEITAÇÃO =====================
+
+    def set_acceptance_model(self, acc_model, rho=None, alpha=None, eps_min=None):
+        """
+        Anexa um modelo de aceitação (de acceptance_combined.make_time_model).
+        Pode sobrescrever rho/alpha/eps_min aqui (senão, usa defaults).
+        """
+        self._acc_cfg["acc_model"] = acc_model
+        if rho is not None:
+            self._acc_cfg["rho"] = float(rho)
+        if alpha is not None:
+            self._acc_cfg["alpha"] = float(alpha)
+        if eps_min is not None:
+            self._acc_cfg["eps_min"] = float(eps_min)
+        return self
+
+    @atfi.function
+    def acceptance_weight(self, s, t):
+        """
+        Retorna ε(s) * f(t|s):
+          - ε(s): favorece alto m2(ππ) via z^alpha com piso eps_min;
+          - f(t|s): generalized-gamma com escala a(s)=a_base*(1 + rho*z).
+        Inputs:
+          s: tensor [..., 2] (m2ab, m2bc) neste Dalitz
+          t: tempo de decaimento (mesma leading shape)
+        """
+        acc = self._acc_cfg["acc_model"]
+        if acc is None:
+            # sem modelo: peso 1
+            return tf.ones_like(self.m2ab(s))
+
+        # z em [0,1] a partir de m2(ac)
+        m2ac = self.msqsum - self.m2ab(s) - self.m2bc(s)
+        z = (m2ac - self.minac) / (self.maxac - self.minac)
+        z = tf.clip_by_value(z, 0.0, 1.0)
+
+        # ε_s(z) = max(z^alpha, eps_min)
+        alpha = self._acc_cfg["alpha"]
+        eps_min = self._acc_cfg["eps_min"]
+        eps_s = tf.pow(z, atfi.const(alpha))
+        if eps_min > 0.0:
+            eps_s = tf.maximum(eps_s, atfi.const(eps_min))
+
+        # generalized-gamma f(t|s)
+        d  = atfi.const(acc.d)
+        p  = atfi.const(acc.p)
+        t0 = atfi.const(acc.t0)
+        rho_eff = acc.rho if hasattr(acc, "rho") else self._acc_cfg["rho"]
+        a_vec = atfi.const(acc.a_base) * (1.0 + atfi.const(rho_eff) * z)
+
+        u = tf.maximum(t - t0, 0.0)
+        from tensorflow.math import lgamma, pow as tfpow
+        tiny = tf.constant(1e-30, dtype=u.dtype)
+        log_pdf_u = (tf.math.log(p)
+                     - lgamma(d)
+                     - (p * d) * tf.math.log(a_vec)
+                     + (p * d - 1.0) * tf.math.log(tf.maximum(u, tiny))
+                     - tfpow(u / a_vec, p))
+        f_t_given_s = tf.exp(log_pdf_u)
+
+        return eps_s * f_t_given_s
