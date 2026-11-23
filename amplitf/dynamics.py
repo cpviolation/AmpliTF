@@ -970,37 +970,65 @@ def kmatrix_phsp_twobody(m2, ma, mb):
     return km_phsp
 
 @atfi.function
-def kmatrix_phsp_multimeson(m2, ma):
-    r"""Calculates the phase space factor for the K-matrix in the case of two-body pole
+def kmatrix_phsp_multimeson(m2, ma, model="ampgen"):
+    r"""Calculates the phase space factor for the multi-meson (4 pion) channel of the K-matrix
 
     .. math::
 
-        \rho(m) = \begin{cases}
-                \sqrt{\frac{m^2-(4m_a^2)}{m^2}}, & \text{if }m\greq 1 GeV \\
-                0.0005-0.0193m^2+0.1385m^4-0.2084m^6-0.2974m^8+0.1366m^{10}+1.0789m^{12} & \text{if }m<1 GeV
-                \end{cases}
+        \rho_{4\pi}(s) = \sqrt{1 - \frac{16 m_a^2}{s}} \quad \text{if } s > 1\text{ GeV}^2
 
-    where the second case is an approximation of the phase space factor for 4-body decays:
+    Below 1 GeV^2, :math:`\rho_{4\pi}` is a polynomial approximation of the 4-body
+    phase-space integral
 
     .. math::
 
-        \rho(m) = \rho_0\int\frac{dm_1^2}{\pi}\int\frac{dm_2^2}{\pi}\frac{M_0^2 \Gamma(m_1)\Gamma(m_2)\sqrt{(m^2+m_1^2-m_2^2)^2-4m^2m_1^2}}{m^2[(M_0^2-m_1^2)^2 + M_0^2\Gamma^2(m_1)][(M_0^2-m_2^2)^2 + M_0^2\Gamma^2(m_2)]}
+        \rho(s) = \rho_0\int\frac{dm_1^2}{\pi}\int\frac{dm_2^2}{\pi}\frac{M_0^2 \Gamma(m_1)\Gamma(m_2)\sqrt{(s+m_1^2-m_2^2)^2-4sm_1^2}}{s[(M_0^2-m_1^2)^2 + M_0^2\Gamma^2(m_1)][(M_0^2-m_2^2)^2 + M_0^2\Gamma^2(m_2)]}
+
+    Two approximations are in use, and the K-matrix production parameters
+    (:math:`\beta`, :math:`f^{prod}`) depend on the one they were fitted with:
+
+    - ``model="ampgen"`` (default), as in AmpGen (LHCb):
+
+      .. math::
+
+          0.0005 - 0.0193 s + 0.1385 s^2 - 0.2084 s^3 - 0.2974 s^4 + 0.1366 s^5 + 1.0789 s^6
+
+    - ``model="belle"``, as in the BaBar/Belle D0 -> KS pi+ pi- implementation
+      (``Resonance::amplitude_KMatrix``), needed to reproduce the Belle 2018 model:
+
+      .. math::
+
+          \sqrt{1 - 16 m_a^2}\left(1.2274 + \frac{0.00370909}{s^2} - \frac{0.111203}{s}
+          - 6.39017 s + 16.8358 s^2 - 21.8845 s^3 + 11.3153 s^4\right)
+
+      which, as in that implementation, is about 0.4% off the s > 1 GeV^2 form at s = 1 GeV^2.
+
+    The two agree to within ~5% except at 0.6-0.9 GeV^2, where they differ by up to ~18%.
 
     Args:
-        m2 (float): the invariant mass squared of the system
-        ma (float): the mass of particle a
+        m2 (float): the invariant mass squared of the system (GeV^2)
+        ma (float): the mass of particle a (the pion)
+        model (str): ``"ampgen"`` or ``"belle"``
 
     Returns:
         complex: the phase space factor
     """
-    km_phsp = tf.where(m2 > 1.0, atfi.sqrt(atfi.cast_complex(atfi.const(1.0) - 16.0*ma**2/m2)), 
-                                atfi.cast_complex(0.0005- 0.0193*m2 + 0.1385*m2**2 - 0.2084*m2**3 - \
-                                0.2974*m2**4 + 0.1366*m2**5 + 1.0789*m2**6) )
-    return km_phsp
+    above = atfi.sqrt(atfi.cast_complex(atfi.const(1.0) - 16.0 * ma**2 / m2))
+    if model == "ampgen":
+        below = (0.0005 - 0.0193 * m2 + 0.1385 * m2**2 - 0.2084 * m2**3
+                 - 0.2974 * m2**4 + 0.1366 * m2**5 + 1.0789 * m2**6)
+    elif model == "belle":
+        below = atfi.sqrt(atfi.const(1.0) - 16.0 * ma**2) * (
+            1.2274 + 0.00370909 / m2**2 - 0.111203 / m2 - 6.39017 * m2
+            + 16.8358 * m2**2 - 21.8845 * m2**3 + 11.3153 * m2**4
+        )
+    else:
+        raise ValueError(f"Unknown multi-meson phase-space model '{model}' (use 'ampgen' or 'belle')")
+    return tf.where(m2 > 1.0, above, atfi.cast_complex(below))
 
 
 @atfi.function
-def kmatrix_phsp(m2, masses):
+def kmatrix_phsp(m2, masses, multimeson="ampgen"):
     r"""Calculates the phase space factor for the K-matrix
 
     .. math::
@@ -1010,6 +1038,8 @@ def kmatrix_phsp(m2, masses):
     Args:
         m2 (float): invariant mass squared of the system
         masses (array): array of masses of the particles in the final state
+        multimeson (str): approximation of the 4pi phase space below 1 GeV^2,
+            ``"ampgen"`` or ``"belle"`` (see :func:`kmatrix_phsp_multimeson`)
 
     Returns:
         float: phase space factor
@@ -1017,7 +1047,7 @@ def kmatrix_phsp(m2, masses):
     km_phsp = tf.stack([
         kmatrix_phsp_twobody(m2, masses[0][0], masses[0][1]),
         kmatrix_phsp_twobody(m2, masses[1][0], masses[1][1]),
-        kmatrix_phsp_multimeson(m2, masses[2][0]),
+        kmatrix_phsp_multimeson(m2, masses[2][0], multimeson),
         kmatrix_phsp_twobody(m2, masses[3][0], masses[3][1]),
         kmatrix_phsp_twobody(m2, masses[4][0], masses[4][1])
     ], axis=1)
@@ -1102,7 +1132,8 @@ def kmatrix_prodvec(m2, m_poles, g_poles, b_poles, s0_prod, fi_prod):
 def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod, masses_poles,
             sA = atfi.const(1.0),
             sA0 = atfi.const(-0.15),
-            mth = atfi.const(0.13957)):
+            mth = atfi.const(0.13957),
+            multimeson = "ampgen"):
     r"""Calculates the K-matrix amplitude
 
     .. math::
@@ -1126,6 +1157,8 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_pro
         fi_prod (array): non resonant coupling constants for production vector (:math:`f_{i}`)
         masses_poles (array): array of masses of the particles in the final state
         mth (float): threshold value for the phase space factor
+        multimeson (str): approximation of the 4pi phase space below 1 GeV^2,
+            ``"ampgen"`` (default) or ``"belle"`` (see :func:`kmatrix_phsp_multimeson`)
 
     Returns:
         array: array of the K-matrix amplitude for each pion channel
@@ -1133,7 +1166,7 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_pro
     # K-matrix
     km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
     # phase-space factor
-    rho = kmatrix_phsp(m2, masses_poles) # [k, n]
+    rho = kmatrix_phsp(m2, masses_poles, multimeson) # [k, n]
     rho = rho_diag = tf.linalg.diag(rho) # [k, n, n]
     # Create the identity matrix of shape (1, n, n)
     identity = tf.eye(5, dtype=atfi.ctype())[None, :, :]  # [1, n, n]
@@ -1149,7 +1182,8 @@ def kmatrix_lineshapes(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_pro
 def kmatrix_lineshape(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod, masses_poles,
             sA = atfi.const(1.0),
             sA0 = atfi.const(-0.15),
-            mth = atfi.const(0.13957)):
+            mth = atfi.const(0.13957),
+            multimeson = "ampgen"):
     r"""Calculates the K-matrix amplitude for the first pole only
 
     .. math::
@@ -1173,6 +1207,8 @@ def kmatrix_lineshape(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod
         fi_prod (array): non resonant coupling constants for production vector (:math:`f_{i}`)
         masses_poles (array): array of masses of the particles in the final state
         mth (float): threshold value for the phase space factor
+        multimeson (str): approximation of the 4pi phase space below 1 GeV^2,
+            ``"ampgen"`` (default) or ``"belle"`` (see :func:`kmatrix_phsp_multimeson`)
 
     Returns:
         array: array of the K-matrix amplitude for each pion channel
@@ -1180,7 +1216,7 @@ def kmatrix_lineshape(m2, m_poles, g_poles, s0, fscat, b_poles, s0_prod, fi_prod
     # K-matrix
     km = kmatrix(m2, m_poles, g_poles, fscat, s0, sA, sA0, mth)
     # phase-space factor
-    rho = kmatrix_phsp(m2, masses_poles) # [k, n]
+    rho = kmatrix_phsp(m2, masses_poles, multimeson) # [k, n]
     rho = rho_diag = tf.linalg.diag(rho) # [k, n, n]
     # Create the identity matrix of shape (1, n, n)
     identity = tf.eye(5, dtype=atfi.ctype())[None, :, :]  # [1, n, n]
