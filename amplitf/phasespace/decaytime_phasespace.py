@@ -21,7 +21,13 @@ import amplitf.interface as atfi
 
 class DecayTimePhaseSpace:
     """
-    Class for decay time phase space
+    Class for decay time phase space.
+
+    Samples are drawn from the exponential decay distribution exp(-t/tau)/tau,
+    not uniformly: a PDF used with tfa.toymc.run_toymc or as the integrand of a
+    normalisation integral over these samples must be divided by
+    :meth:`density` (for mixing, use the amplitf.mixing time-evolution functions
+    with ``relative_to_decay=True``).
     """
 
     def __init__(self, tau=1.0):
@@ -46,11 +52,10 @@ class DecayTimePhaseSpace:
     #@atfi.function
     def unfiltered_sample(self, size, maximum=None):
         """
-        Return TF graph for uniform sample of points within phase space.
-          size     : number of _initial_ points to generate. Not all of them will fall into phase space,
-                     so the number of points in the output will be <size.
-          majorant : if majorant>0, add 2nd dimension to the generated tensor which is
-                     uniform number from 0 to majorant. Useful for accept-reject toy MC.
+        Return a sample of decay times distributed as exp(-t/tau)/tau (see :meth:`density`).
+          size     : number of points to generate
+          maximum  : if not None, add a 2nd dimension with a uniform number from 0 to maximum.
+                     Useful for accept-reject toy MC.
         """
         u = tf.random.uniform([size], 0, 1, dtype=atfi.fptype())
         v = [-atfi.log(1-u) * self.tau]
@@ -61,15 +66,21 @@ class DecayTimePhaseSpace:
     #@atfi.function
     def uniform_sample(self, size, maximum=None):
         """
-        Generate uniform sample of point within phase space.
-          size     : number of _initial_ points to generate. Not all of them will fall into phase space,
-                     so the number of points in the output will be <size.
-          majorant : if majorant>0, add 3rd dimension to the generated tensor which is
-                     uniform number from 0 to majorant. Useful for accept-reject toy MC.
-        Note it does not actually generate the sample, but returns the data flow graph for generation,
-        which has to be run within TF session.
+        Sample of decay times distributed as exp(-t/tau)/tau, i.e. NOT uniform (the name is kept
+        for compatibility with the other phase-space classes). See :meth:`density`.
+          size     : number of points to generate
+          maximum  : if not None, add a 2nd dimension with a uniform number from 0 to maximum.
         """
         return self.filter(self.unfiltered_sample(size, maximum))
+
+    @atfi.function
+    def density(self, x):
+        """
+        Probability density exp(-t/tau)/tau of the samples from :meth:`uniform_sample` and
+        :meth:`unfiltered_sample`, at the points x.
+        """
+        t = self.t(x)
+        return atfi.exp(-t / self.tau) / self.tau
     
     @atfi.function
     def unfiltered_acceptance_sample(self, function, pars, size, maximum=None):
