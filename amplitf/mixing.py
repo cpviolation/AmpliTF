@@ -47,7 +47,7 @@ so that
 
 with :math:`\psi_\pm(t) = e^{-(1\pm y)t/\tau}` and :math:`\psi_i(t) = e^{-(1+ix)t/\tau}`.
 For an initial :math:`\bar{M}^0`, exchange :math:`A_f \leftrightarrow \bar{A}_f` and
-:math:`q/p \to p/q`.
+:math:`q/p \to p/q` (``mixing_density(..., flavor=False)``).
 
 Sampling the decay time: :class:`amplitf.phasespace.decaytime_phasespace.DecayTimePhaseSpace`
 draws times from :math:`e^{-t/\tau}/\tau`. Toy generation and normalisation integrals then need
@@ -117,7 +117,8 @@ def psii(t, x, tau, relative_to_decay=False):
 
 # Probability density
 def mixing_density(ampl_dir, ampl_cnj, qoverp,
-                   time_evolution_pos, time_evolution_neg, time_evolution_int):
+                   time_evolution_pos, time_evolution_neg, time_evolution_int,
+                   flavor=True):
     r"""Calculates the probability density of the mixing
 
     ..math::
@@ -131,6 +132,10 @@ def mixing_density(ampl_dir, ampl_cnj, qoverp,
 
         A_1 = \frac{1}{2}\left(\Af + \frac{q}{p}\Abf\right)\qquad A_2 = \frac{1}{2}\left(\Af - \frac{q}{p}\Abf\right)
 
+    For an initial :math:`\bar{M}^0` use ``flavor=False`` and pass the amplitudes swapped
+    (``ampl_dir`` = :math:`\bar{A}_f`, ``ampl_cnj`` = :math:`A_f`): then
+    :math:`A_{1,2} = \frac{1}{2}(\bar{A}_f \pm \frac{p}{q} A_f)`.
+
     Args:
         ampl_dir (complex): amplitude of the direct decay
         ampl_cnj (complex): amplitude of the charged conjugate decay
@@ -138,12 +143,14 @@ def mixing_density(ampl_dir, ampl_cnj, qoverp,
         time_evolution_pos (float): time evolution of the sum of the decays
         time_evolution_neg (float): time evolution of the subtraction of the decays
         time_evolution_int (complex): time evolution of the interference of the decays
+        flavor (bool): True for an initial particle (:math:`M^0`), False for an initial
+            antiparticle (:math:`\bar{M}^0`, with the amplitudes swapped as above)
 
     Returns:
         float: the density of probability for the event
     """    
     ampDir = ampl_dir
-    ampCnj = qoverp * ampl_cnj
+    ampCnj = qoverp * ampl_cnj if flavor else ampl_cnj / qoverp
 
     apb2 = 0.5 * (ampDir + ampCnj)
     amb2 = 0.5 * atfi.conjugate(ampDir - ampCnj)

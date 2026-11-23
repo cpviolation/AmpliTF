@@ -50,9 +50,12 @@ def test_d0_and_d0bar(inputs):
     d0, d0bar = explicit(t, af, abf)
     dens = atfm.mixing_density(c(af), c(abf), c(QOP), *evolution(t)).numpy()
     np.testing.assert_allclose(dens, d0, rtol=1e-12)
-    # initial D0bar: exchange A_f <-> Abar_f and q/p -> p/q
-    dens_bar = atfm.mixing_density(c(abf), c(af), c(1 / QOP), *evolution(t)).numpy()
+    # initial D0bar: exchange A_f <-> Abar_f and q/p -> p/q, via flavor=False
+    dens_bar = atfm.mixing_density(c(abf), c(af), c(QOP), *evolution(t), flavor=False).numpy()
     np.testing.assert_allclose(dens_bar, d0bar, rtol=1e-12)
+    # equivalent to passing p/q explicitly
+    explicit_pq = atfm.mixing_density(c(abf), c(af), c(1 / QOP), *evolution(t)).numpy()
+    np.testing.assert_allclose(dens_bar, explicit_pq, rtol=1e-12)
 
 
 def test_relative_to_decay(inputs):
