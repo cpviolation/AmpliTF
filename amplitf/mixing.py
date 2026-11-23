@@ -16,26 +16,47 @@
 r"""
 Formulas for building a model where meson mixing is involved.
 
-The mixing parameters for the mass eigenstates of a neutral meson (:math:`M^0`, :math:`\bar{M}^0`) are
+Conventions (as in HFLAV): the mass eigenstates of a neutral meson are
+
+.. math::
+
+    |M_{1,2}\rangle = p|M^0\rangle \pm q|\bar{M}^0\rangle,
+
+with masses :math:`m_{1,2}` and widths :math:`\Gamma_{1,2}`, and the mixing parameters are
 
 .. math::
 
     \begin{align}
-    x &\equiv 2\frac{m_2-m_1}{\gamma_1+\gamma_2} = \frac{\Delta M}{\Gamma}\\
-    y &\equiv \frac{\gamma_2-\gamma_1}{\gamma_1+\gamma_2} = \frac{\Delta\Gamma}{2\Gamma},
+    x &\equiv \frac{m_1-m_2}{\Gamma}, &
+    y &\equiv \frac{\Gamma_1-\Gamma_2}{2\Gamma}, &
+    \Gamma &\equiv \frac{\Gamma_1+\Gamma_2}{2} = \frac{1}{\tau}.
     \end{align}
 
-
-where :math:`m_i` and :math:`\gamma_i` (:math:`i=1,2`) are the eigenvalues of the phyical eigenstates :math:`M_{1,2}`.
-
-The time evolution of the physical states is given by
+The amplitude of an initial :math:`M^0` decaying at time :math:`t` to a final state :math:`f` is
 
 .. math::
-    
-    |M_i(t)>= e^{-i(m_i-i\gamma_i/2)t}|M_i(t=0)>.
 
+    A(t) = A_1 e^{-i m_1 t - \Gamma_1 t/2} + A_2 e^{-i m_2 t - \Gamma_2 t/2},\qquad
+    A_{1,2} = \frac{1}{2}\left(A_f \pm \frac{q}{p}\bar{A}_f\right),
 
-... Continue explanation later
+so that
+
+.. math::
+
+    |A(t)|^2 = |A_1|^2\psi_+(t) + |A_2|^2\psi_-(t) + 2\,\mathrm{Re}\left(A_1 A_2^* \psi_i(t)\right),
+
+with :math:`\psi_\pm(t) = e^{-(1\pm y)t/\tau}` and :math:`\psi_i(t) = e^{-(1+ix)t/\tau}`.
+For an initial :math:`\bar{M}^0`, exchange :math:`A_f \leftrightarrow \bar{A}_f` and
+:math:`q/p \to p/q`.
+
+Sampling the decay time: :class:`amplitf.phasespace.decaytime_phasespace.DecayTimePhaseSpace`
+draws times from :math:`e^{-t/\tau}/\tau`. Toy generation and normalisation integrals then need
+the density *relative to* that exponential, i.e. the time-evolution functions with
+``relative_to_decay=True``:
+:math:`\psi_\pm/e^{-t/\tau} = e^{\mp y t/\tau}` and :math:`\psi_i/e^{-t/\tau} = e^{-ixt/\tau}`.
+Evaluated on data, the relative density differs from the true one by the factor
+:math:`e^{-t/\tau}`, which does not depend on :math:`x`, :math:`y` or :math:`q/p`
+(it does depend on :math:`\tau` if that is a free parameter).
 """
 import tensorflow as tf
 import amplitf.interface as atfi
@@ -44,48 +65,54 @@ import amplitf.dynamics as atfd
 
 # Time evolution functions.
 @atfi.function
-def psip( t, y, tau ):
-    r"""Time evolution function :math:`\psi_+(t) = e^{-t}e^{(1+y)}`
+def psip(t, y, tau, relative_to_decay=False):
+    r"""Time evolution of the :math:`|A_1|^2` term, :math:`\psi_+(t) = e^{-(1+y)t/\tau}`
 
     Args:
         t (float): decay time of the candidate
-        y (float): mixing parameter
+        y (float): mixing parameter :math:`y`
         tau (float): lifetime of the decaying particle
+        relative_to_decay (bool): if True, return :math:`\psi_+(t)/e^{-t/\tau} = e^{-yt/\tau}`
 
     Returns:
-        float: the time evolution function for the sum of the two decay amplitudes
+        float: the time evolution function
     """
-    return atfi.exp( - ( 1.0 + y ) * t / tau)
+    rate = y if relative_to_decay else 1.0 + y
+    return atfi.exp(-rate * t / tau)
 
 
 @atfi.function
-def psim( t, y, tau ):
-    r"""Time evolution function :math:`\psi_-(t) = e^{-t}e^{(1-y)}`
+def psim(t, y, tau, relative_to_decay=False):
+    r"""Time evolution of the :math:`|A_2|^2` term, :math:`\psi_-(t) = e^{-(1-y)t/\tau}`
 
     Args:
         t (float): decay time of the candidate
-        x (float): mixing parameter
+        y (float): mixing parameter :math:`y`
         tau (float): lifetime of the decaying particle
+        relative_to_decay (bool): if True, return :math:`\psi_-(t)/e^{-t/\tau} = e^{+yt/\tau}`
 
     Returns:
-        float: the time evolution function for the sum of the two decay amplitudes
+        float: the time evolution function
     """
-    return atfi.exp( - ( 1.0 - y ) * t / tau)
+    rate = -y if relative_to_decay else 1.0 - y
+    return atfi.exp(-rate * t / tau)
 
 
 @atfi.function
-def psii( t, x, tau ):
-    r"""Time evolution function :math:`\psi_i(t) = e^{-t}e^{(1+ix)}`
+def psii(t, x, tau, relative_to_decay=False):
+    r"""Time evolution of the interference term, :math:`\psi_i(t) = e^{-(1+ix)t/\tau}`
 
     Args:
         t (float): decay time of the candidate
-        x (float): mixing parameter
+        x (float): mixing parameter :math:`x`
         tau (float): lifetime of the decaying particle
+        relative_to_decay (bool): if True, return :math:`\psi_i(t)/e^{-t/\tau} = e^{-ixt/\tau}`
 
     Returns:
-        float: the time evolution function for the sum of the two decay amplitudes
+        complex: the time evolution function
     """
-    return atfi.exp( - atfi.complex( atfi.const(1.0) , x ) * tf.cast(t / tau, tf.complex128))
+    real = atfi.const(0.0) if relative_to_decay else atfi.const(1.0)
+    return atfi.exp(-atfi.complex(real, x) * tf.cast(t / tau, atfi.ctype()))
 
 
 # Probability density
