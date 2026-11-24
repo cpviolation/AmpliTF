@@ -58,7 +58,7 @@ def test_projectors_and_orbital_tensors():
     np.testing.assert_allclose(np.einsum("kmn,nl,kl->km", L2, G, P.numpy()), 0, atol=1e-12)
 
 
-@pytest.mark.parametrize("name", ["S_VV_S", "S_VV_P", "S_VV_D", "S_TV_P"])
+@pytest.mark.parametrize("name", ["S_VV_S", "S_VV_P", "S_VV_D", "S_TV_P", "S_TS_D"])
 def test_scalar_vertices_are_lorentz_invariant(name):
     """D -> (a b)(c d): scalar spin factor from the two resonance tensors."""
     pa, pb, pc, pd = random_momenta(50, [0.494, 0.494, 0.14, 0.14])
@@ -69,6 +69,9 @@ def test_scalar_vertices_are_lorentz_invariant(name):
         if name == "S_TV_P":
             r1 = cov.T_SS_D(a + b, a - b, atfi.ones(a[:, 0]), atfi.ones(a[:, 0]))
         r2 = cov.V_SS_P(cc + d, cc - d, atfi.ones(a[:, 0]), atfi.ones(a[:, 0]))
+        if name == "S_TS_D":
+            r1 = cov.T_SS_D(a + b, a - b, atfi.ones(a[:, 0]), atfi.ones(a[:, 0]))
+            r2 = cov.S_SS_S(cc + d, cc - d, atfi.ones(a[:, 0]), atfi.ones(a[:, 0]))
         return cov.vertex(name, a + b + cc + d, a + b - cc - d, r1, r2).numpy()
 
     ref = value([pa, pb, pc, pd])
@@ -102,3 +105,63 @@ def test_gounaris_sakurai_close_to_breit_wigner_at_pole():
     gs = agl.gounaris_sakurai(s, s1, s2, m, w, 1.5, 1, mpi).numpy()
     bw = agl.breit_wigner(s, s1, s2, m, w, 0.0, 1).numpy() * agl.form_factor(s, s1, s2, 1.5, 1).numpy()
     np.testing.assert_allclose(gs, bw, rtol=1e-9)
+
+
+def test_vector_vertices_are_transverse():
+    """V -> V S in S and D wave: the spin tensor is orthogonal to the parent momentum."""
+    pa, pb, pc = random_momenta(50, [0.494, 0.14, 0.14])
+    a, b, cc = c(pa), c(pb), c(pc)
+    one = atfi.ones(a[:, 0])
+    v1 = cov.V_SS_P(a + b, a - b, one, one)
+    P, Q = a + b + cc, a + b - cc
+    for name in ("V_VS_S", "V_VS_D"):
+        v = cov.vertex(name, P, Q, v1, one).numpy()
+        np.testing.assert_allclose(np.einsum("ki,ij,kj->k", v, G, P.numpy()), 0, atol=1e-12)
+        assert np.any(np.abs(v) > 0)
+
+
+def test_spline_interpolates_knots_and_is_smooth():
+    """AmpGen's natural cubic spline: exact at the knots, continuous first derivative,
+    zero curvature at the ends, last knot value outside the range."""
+    xmin, xmax = 0.2, 2.0
+    knots = np.linspace(xmin, xmax, 10)
+    values = np.sin(3 * knots) + knots ** 2
+    h = knots[1] - knots[0]
+    eps = 1e-7
+    at = agl.spline(c(knots[1:-1]), values, xmin, xmax).numpy()
+    np.testing.assert_allclose(at, values[1:-1], rtol=1e-12)
+    lo = agl.spline(c(knots[1:-1] - eps), values, xmin, xmax).numpy()
+    hi = agl.spline(c(knots[1:-1] + eps), values, xmin, xmax).numpy()
+    np.testing.assert_allclose((hi - at) / eps, (at - lo) / eps, rtol=1e-4, atol=1e-5)
+    curv = agl.spline_curvatures(values, xmin, xmax)
+    assert curv[0] == curv[-1] == 0.0
+    np.testing.assert_allclose(curv[1:-1], (np.roll(values, -1) - 2 * values + np.roll(values, 1))[1:-1] / h ** 2,
+                               rtol=0.5)  # close to the finite-difference curvature
+    out = agl.spline(c([0.1, 2.5]), values, xmin, xmax).numpy()
+    np.testing.assert_allclose(out, values[-1])
+
+
+def test_gspline_at_pole():
+    """At s = m^2 the running width of GSpline is the nominal width."""
+    m, w, r = 1.2, 0.4, 1.7
+    xmin, xmax = 0.2, 3.0
+    values = np.linspace(xmin, xmax, 20) ** 2
+    s, s1, s2 = c([m * m]), c([1.02 ** 2]), c([0.1396 ** 2])
+    for form, ff in (("EFF", np.exp(-abs(agl.q2(m * m, 1.02 ** 2, 0.1396 ** 2)) * r * r / 2)),
+                     ("BlattWeisskopf", agl.form_factor(s, s1, s2, r, 0).numpy())):
+        got = agl.gspline(s, s1, s2, m, w, r, 0, values, xmin, xmax, form_factor=form).numpy()
+        np.testing.assert_allclose(got, agl.kfactor(m, w).numpy() * ff / (-1j * m * w), rtol=1e-12)
+
+
+def test_flatte_a0_at_pole():
+    m, g, ratio = 0.98, 0.175, 1.2
+    mpi, meta, mk = 0.13957, 0.547853, 0.493677
+    s = c([1.2])  # above the KK threshold: real phase-space factors
+    rho_pieta = np.sqrt((1 - (mpi - meta) ** 2 / 1.2) * (1 - (mpi + meta) ** 2 / 1.2))
+    width = g * (rho_pieta + ratio * np.sqrt(1 - 4 * mk ** 2 / 1.2))
+    np.testing.assert_allclose(agl.flatte_a0(s, m, g, ratio, mpi, meta, mk).numpy(),
+                               1 / (m * m - 1j * m * width - 1.2), rtol=1e-12)
+    below = agl.flatte_a0(c([0.9]), m, g, ratio, mpi, meta, mk).numpy()
+    width_below = g * (np.sqrt((1 - (mpi - meta) ** 2 / 0.9) * (1 - (mpi + meta) ** 2 / 0.9))
+                       + ratio * 1j * np.sqrt(4 * mk ** 2 / 0.9 - 1))
+    np.testing.assert_allclose(below, 1 / (m * m - 1j * m * width_below - 0.9), rtol=1e-12)

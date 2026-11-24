@@ -100,7 +100,18 @@ def _contract_lower(t, a, b):
     return tf.einsum("...mn,...m,...n->...", t, lower(a), lower(b))
 
 
+def _lower2(t):
+    """Lower both indices of a rank-2 tensor."""
+    g = tf.constant(np.diag(_METRIC), dtype=t.dtype)
+    return t * g[:, None] * g[None, :]
+
+
 # Vertices R -> a b. Names and expressions follow AmpGen's Vertex.cpp.
+
+def S_SS_S(P, Q, V1, V2):
+    """Scalar to two scalars: :math:`V_1 V_2`."""
+    return V1 * V2
+
 
 def S_VV_S(P, Q, V1, V2):
     """Scalar to two vectors, S-wave: :math:`V_1 \\cdot V_2`."""
@@ -128,6 +139,11 @@ def S_TV_P(P, Q, V1, V2):
     return _contract_lower(V1, orbital_pwave(P, Q), V2)
 
 
+def S_TS_D(P, Q, V1, V2):
+    """Scalar to tensor + scalar, D-wave: :math:`L_2^{\\mu\\nu} T_{\\mu\\nu} V_2`."""
+    return tf.reduce_sum(orbital_dwave(P, Q) * _lower2(V1), axis=[-2, -1]) * V2
+
+
 def V_SS_P(P, Q, V1, V2):
     """Vector to two scalars, P-wave: :math:`L^\\mu V_1 V_2`."""
     return orbital_pwave(P, Q) * (V1 * V2)[..., None]
@@ -143,7 +159,16 @@ def V_VS_S(P, Q, V1, V2):
     return tf.einsum("...mn,...n->...m", spin1_projector(P), lower(V1)) * V2[..., None]
 
 
+def V_VS_D(P, Q, V1, V2):
+    """Vector to vector + scalar, D-wave: :math:`S^{\\mu\\nu} L_{2,\\nu\\alpha} V_1^\\alpha V_2`."""
+    t = tf.einsum("...mn,...na,...a->...m", spin1_projector(P), _lower2(orbital_dwave(P, Q)), V1)
+    return t * V2[..., None]
+
+
 VERTICES = {
+    "S_SS_S": S_SS_S,
+    "S_TS_D": S_TS_D,
+    "V_VS_D": V_VS_D,
     "S_VV_S": S_VV_S,
     "S_VV_P": S_VV_P,
     "S_VV_D": S_VV_D,
